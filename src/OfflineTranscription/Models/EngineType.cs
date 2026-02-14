@@ -6,7 +6,8 @@ namespace OfflineTranscription.Models;
 public enum EngineType
 {
     WhisperCpp,
-    SherpaOnnxOffline
+    SherpaOnnxOffline,
+    SherpaOnnxStreaming
 }
 
 /// <summary>
@@ -16,5 +17,6 @@ public enum SherpaModelType
 {
     Moonshine,
     SenseVoice,
-    OmnilingualCtc
+    OmnilingualCtc,
+    ZipformerTransducer
 }

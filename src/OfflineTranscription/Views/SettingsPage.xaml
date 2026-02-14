@@ -18,7 +18,7 @@
                 <Button Content="Save Screenshot" Click="SaveScreenshot_Click" />
             </StackPanel>
 
-            <Separator Margin="0,8" />
+            <Border Height="1" Margin="0,8" Background="#33000000" />
 
             <!-- Current Model -->
             <TextBlock Text="Current Model" Style="{StaticResource SubtitleTextBlockStyle}" />
@@ -53,7 +53,7 @@
                 </ListView.ItemTemplate>
             </ListView>
 
-            <Separator Margin="0,8" />
+            <Border Height="1" Margin="0,8" Background="#33000000" />
 
             <!-- Toggles -->
             <TextBlock Text="Options" Style="{StaticResource SubtitleTextBlockStyle}" />
@@ -70,7 +70,7 @@
                           IsOn="{x:Bind Prefs.ShowTimestamps, Mode=TwoWay}"
                           Toggled="TimestampsToggle_Toggled" />
 
-            <Separator Margin="0,8" />
+            <Border Height="1" Margin="0,8" Background="#33000000" />
 
             <!-- Diagnostics / Evidence -->
             <TextBlock Text="Diagnostics" Style="{StaticResource SubtitleTextBlockStyle}" />

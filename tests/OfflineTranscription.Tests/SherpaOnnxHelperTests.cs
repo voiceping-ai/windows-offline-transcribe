@@ -215,6 +215,16 @@ public class SherpaOnnxHelperTests : IDisposable
     }
 
     [Fact]
+    public void DetectModelType_SenseVoice_FallbackForModelOnnx()
+    {
+        // OmnilingualCtc also has model*.onnx — DetectModelType defaults to SenseVoice.
+        // OmnilingualCtc requires explicit model type via EngineFactory.
+        File.WriteAllText(Path.Combine(_tempDir, "model.int8.onnx"), "");
+        File.WriteAllText(Path.Combine(_tempDir, "tokens.txt"), "");
+        Assert.Equal(SherpaModelType.SenseVoice, SherpaOnnxOfflineEngine.DetectModelType(_tempDir));
+    }
+
+    [Fact]
     public void DetectModelType_ThrowsForUnknownModelDir()
     {
         Assert.Throws<InvalidOperationException>(() => SherpaOnnxOfflineEngine.DetectModelType(_tempDir));

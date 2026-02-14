@@ -54,6 +54,57 @@ internal static class SherpaOnnxNative
         var textPtr = Marshal.ReadIntPtr(resultPtr);
         return Marshal.PtrToStringUTF8(textPtr) ?? "";
     }
+
+    // ── Online (Streaming) Recognizer ──
+
+    [DllImport(LibName, EntryPoint = "SherpaOnnxCreateOnlineRecognizer", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr CreateOnlineRecognizer(ref SherpaOnnxOnlineRecognizerConfig config);
+
+    [DllImport(LibName, EntryPoint = "SherpaOnnxDestroyOnlineRecognizer", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void DestroyOnlineRecognizer(IntPtr recognizer);
+
+    [DllImport(LibName, EntryPoint = "SherpaOnnxCreateOnlineStream", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr CreateOnlineStream(IntPtr recognizer);
+
+    [DllImport(LibName, EntryPoint = "SherpaOnnxDestroyOnlineStream", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void DestroyOnlineStream(IntPtr stream);
+
+    [DllImport(LibName, EntryPoint = "SherpaOnnxOnlineStreamAcceptWaveform", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void OnlineStreamAcceptWaveform(
+        IntPtr stream,
+        int sampleRate,
+        [In] float[] samples,
+        int n);
+
+    [DllImport(LibName, EntryPoint = "SherpaOnnxIsOnlineStreamReady", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int IsOnlineStreamReady(IntPtr recognizer, IntPtr stream);
+
+    [DllImport(LibName, EntryPoint = "SherpaOnnxDecodeOnlineStream", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void DecodeOnlineStream(IntPtr recognizer, IntPtr stream);
+
+    [DllImport(LibName, EntryPoint = "SherpaOnnxGetOnlineStreamResultAsJson", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr GetOnlineStreamResultAsJson(IntPtr recognizer, IntPtr stream);
+
+    [DllImport(LibName, EntryPoint = "SherpaOnnxDestroyOnlineStreamResultJson", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void DestroyOnlineStreamResultJson(IntPtr json);
+
+    [DllImport(LibName, EntryPoint = "SherpaOnnxOnlineStreamReset", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void OnlineStreamReset(IntPtr recognizer, IntPtr stream);
+
+    [DllImport(LibName, EntryPoint = "SherpaOnnxOnlineStreamInputFinished", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void OnlineStreamInputFinished(IntPtr stream);
+
+    [DllImport(LibName, EntryPoint = "SherpaOnnxOnlineStreamIsEndpoint", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int OnlineStreamIsEndpoint(IntPtr recognizer, IntPtr stream);
+
+    /// <summary>
+    /// Read text from an Online result JSON string pointer.
+    /// </summary>
+    internal static string ReadOnlineResultJson(IntPtr jsonPtr)
+    {
+        if (jsonPtr == IntPtr.Zero) return "";
+        return Marshal.PtrToStringUTF8(jsonPtr) ?? "";
+    }
 }
 
 // ── Config structs matching sherpa-onnx C API ──
@@ -143,4 +194,102 @@ internal struct SherpaOnnxOfflineMoonshineModelConfig
     public IntPtr Encoder;
     public IntPtr UncachedDecoder;
     public IntPtr CachedDecoder;
+}
+
+// ── Online (Streaming) config structs matching sherpa-onnx C API ──
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOnlineTransducerModelConfig
+{
+    public IntPtr Encoder;
+    public IntPtr Decoder;
+    public IntPtr Joiner;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOnlineParaformerModelConfig
+{
+    public IntPtr Encoder;
+    public IntPtr Decoder;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOnlineZipformer2CtcModelConfig
+{
+    public IntPtr Model;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOnlineNemoCtcModelConfig
+{
+    public IntPtr Model;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOnlineToneCtcModelConfig
+{
+    public IntPtr Model;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOnlineModelConfig
+{
+    public SherpaOnnxOnlineTransducerModelConfig Transducer;
+    public SherpaOnnxOnlineParaformerModelConfig Paraformer;
+    public SherpaOnnxOnlineZipformer2CtcModelConfig Zipformer2Ctc;
+    public IntPtr Tokens;
+    public int NumThreads;
+    public IntPtr Provider;
+    public int Debug;
+    public IntPtr ModelType;
+    public IntPtr ModelingUnit;
+    public IntPtr BpeVocab;
+    public IntPtr TokensBuf;
+    public int TokensBufSize;
+    public SherpaOnnxOnlineNemoCtcModelConfig NemoCtc;
+    public SherpaOnnxOnlineToneCtcModelConfig TOneCtc;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxFeatureConfig
+{
+    public int SampleRate;
+    public int FeatureDim;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOnlineCtcFstDecoderConfig
+{
+    public IntPtr Graph;
+    public int MaxActive;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxHomophoneReplacerConfig
+{
+    public IntPtr DictDir;
+    public IntPtr Lexicon;
+    public IntPtr RuleFsts;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOnlineRecognizerConfig
+{
+    public SherpaOnnxFeatureConfig FeatConfig;
+    public SherpaOnnxOnlineModelConfig ModelConfig;
+    public IntPtr DecodingMethod;
+    public int MaxActivePaths;
+    public int EnableEndpoint;
+    public float Rule1MinTrailingSilence;
+    public float Rule2MinTrailingSilence;
+    public float Rule3MinUtteranceLength;
+    public IntPtr HotwordsFile;
+    public float HotwordsScore;
+    public SherpaOnnxOnlineCtcFstDecoderConfig CtcFstDecoderConfig;
+    public IntPtr RuleFsts;
+    public IntPtr RuleFars;
+    public float BlankPenalty;
+    public IntPtr HotwordsBuf;
+    public int HotwordsBufSize;
+    public SherpaOnnxHomophoneReplacerConfig Hr;
 }

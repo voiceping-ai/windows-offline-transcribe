@@ -8,7 +8,7 @@ using OfflineTranscription.Models;
 namespace OfflineTranscription.Engines;
 
 /// <summary>
-/// sherpa-onnx offline engine via P/Invoke. Supports SenseVoice and Moonshine models.
+/// sherpa-onnx offline engine via P/Invoke. Supports SenseVoice, Moonshine, and OmnilingualCtc models.
 /// Port of iOS SherpaOnnxOfflineEngine.swift.
 /// </summary>
 public sealed class SherpaOnnxOfflineEngine : IASREngine
@@ -17,11 +17,17 @@ public sealed class SherpaOnnxOfflineEngine : IASREngine
     private readonly SemaphoreSlim _sem = new(1, 1);
     private bool _disposed;
     private SherpaModelType _modelType;
+    private readonly SherpaModelType? _explicitModelType;
     private string _provider = "cpu";
 
     // Keep marshaled UTF-8 strings alive for the lifetime of the recognizer.
     // (Some native APIs may keep string pointers from the config struct.)
     private readonly Utf8StringPool _stringPool = new();
+
+    public SherpaOnnxOfflineEngine(SherpaModelType? modelType = null)
+    {
+        _explicitModelType = modelType;
+    }
 
     public bool IsLoaded => _recognizer != IntPtr.Zero;
     public bool IsStreaming => false;
@@ -37,8 +43,8 @@ public sealed class SherpaOnnxOfflineEngine : IASREngine
 
             return await Task.Run(() =>
             {
-                // Detect model type from files present
-                _modelType = DetectModelType(modelDir);
+                // Use explicit model type if provided, otherwise detect from files
+                _modelType = _explicitModelType ?? DetectModelType(modelDir);
                 _provider = SelectProvider(modelDir);
 
                 Debug.WriteLine($"[SherpaOnnx] Loading {_modelType} from {modelDir}, provider={_provider}");
@@ -110,6 +116,7 @@ public sealed class SherpaOnnxOfflineEngine : IASREngine
                         lang = TryExtractSenseVoiceLanguage(ref text);
                     else if (_modelType == SherpaModelType.Moonshine)
                         lang = "en";
+                    // OmnilingualCtc: model outputs text directly, no language detection
 
                     // Strip CJK spaces for SenseVoice output
                     if (_modelType == SherpaModelType.SenseVoice)
@@ -225,6 +232,13 @@ public sealed class SherpaOnnxOfflineEngine : IASREngine
                     Encoder = pin(FindFile(modelDir, "encode")),
                     UncachedDecoder = pin(FindFile(modelDir, "uncached_decode")),
                     CachedDecoder = pin(FindFile(modelDir, "cached_decode"))
+                };
+                break;
+
+            case SherpaModelType.OmnilingualCtc:
+                modelConfig.NemoCtc = new SherpaOnnxOfflineNemoEncDecCtcModelConfig
+                {
+                    Model = pin(FindFile(modelDir, "model"))
                 };
                 break;
 

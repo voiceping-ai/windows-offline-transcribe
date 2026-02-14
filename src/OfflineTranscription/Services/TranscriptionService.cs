@@ -129,7 +129,12 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
                 _prefs.SelectedModelId = model.Id;
                 Debug.WriteLine($"[TranscriptionService] Model loaded: {model.Id}");
 
-                string provider = _engine is SherpaOnnxOfflineEngine sherpa ? sherpa.Provider : "cpu";
+                string provider = _engine switch
+                {
+                    SherpaOnnxOfflineEngine sherpa => sherpa.Provider,
+                    SherpaOnnxStreamingEngine streaming => streaming.Provider,
+                    _ => "cpu"
+                };
                 OfflineTranscription.App.Evidence.LogEvent("model_load_success", new
                 {
                     modelId = model.Id,
@@ -139,9 +144,12 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
                 });
                 OfflineTranscription.App.Evidence.CaptureModelEvidence(model, provider);
 
-                // Configure chunk manager per model
-                float chunkSec = model.EngineType == EngineType.SherpaOnnxOffline ? 3.5f : 15f;
-                _chunkManager = new StreamingChunkManager(chunkSec);
+                // Configure chunk manager per model (streaming engines handle their own windowing)
+                if (!_engine.IsStreaming)
+                {
+                    float chunkSec = model.EngineType == EngineType.SherpaOnnxOffline ? 3.5f : 15f;
+                    _chunkManager = new StreamingChunkManager(chunkSec);
+                }
             }
             else
             {
@@ -228,10 +236,32 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
             bufferSeconds = _recorder.BufferSeconds
         });
 
-        // Set final confirmed text
-        _chunkManager.ConfirmedText = $"{ConfirmedText} {HypothesisText}".Trim();
-        ConfirmedText = _chunkManager.ConfirmedText;
-        HypothesisText = "";
+        // Drain final audio for streaming engines
+        if (_engine?.IsStreaming == true)
+        {
+            var finalSegment = _engine.DrainFinalAudio();
+            if (finalSegment != null && !string.IsNullOrWhiteSpace(finalSegment.Text))
+            {
+                var finalText = string.IsNullOrEmpty(ConfirmedText)
+                    ? finalSegment.Text
+                    : $"{ConfirmedText} {finalSegment.Text}";
+                ConfirmedText = finalText.Trim();
+                HypothesisText = "";
+            }
+            else
+            {
+                // Promote any remaining hypothesis
+                ConfirmedText = $"{ConfirmedText} {HypothesisText}".Trim();
+                HypothesisText = "";
+            }
+        }
+        else
+        {
+            // Set final confirmed text (offline engines)
+            _chunkManager.ConfirmedText = $"{ConfirmedText} {HypothesisText}".Trim();
+            ConfirmedText = _chunkManager.ConfirmedText;
+            HypothesisText = "";
+        }
 
         if (_prefs.EvidenceMode)
         {
@@ -294,6 +324,94 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
     {
         Debug.WriteLine("[TranscriptionService] Transcription loop started");
 
+        if (_engine?.IsStreaming == true)
+        {
+            await StreamingLoopAsync(ct);
+        }
+        else
+        {
+            await OfflineLoopAsync(ct);
+        }
+
+        Debug.WriteLine("[TranscriptionService] Transcription loop ended");
+    }
+
+    /// <summary>
+    /// Streaming transcription loop: feeds audio incrementally, polls results.
+    /// Port of Android streamingLoop().
+    /// </summary>
+    private async Task StreamingLoopAsync(CancellationToken ct)
+    {
+        Debug.WriteLine("[TranscriptionService] Streaming loop started");
+        string streamingConfirmedText = "";
+
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                var currentSamples = _recorder.SampleCount;
+                var bufferSeconds = _recorder.BufferSeconds;
+                _metrics.Update();
+
+                PostUI(() =>
+                {
+                    BufferSeconds = bufferSeconds;
+                    CpuPercent = _metrics.CpuPercent;
+                    MemoryMB = _metrics.MemoryMB;
+                });
+
+                // Feed new audio to the streaming engine
+                if (currentSamples > _lastProcessedSample)
+                {
+                    if (_recorder.TryGetAudioSlice(_lastProcessedSample, currentSamples, out var newSamples))
+                    {
+                        _engine!.FeedAudio(newSamples);
+                        _lastProcessedSample = currentSamples;
+                    }
+                }
+
+                // Poll for streaming result
+                var segment = _engine!.GetStreamingResult();
+                var hypothesisText = segment?.Text?.Trim() ?? "";
+
+                // Check for endpoint detection
+                if (_engine.IsEndpointDetected() && !string.IsNullOrWhiteSpace(hypothesisText))
+                {
+                    // Promote hypothesis to confirmed
+                    streamingConfirmedText = string.IsNullOrEmpty(streamingConfirmedText)
+                        ? hypothesisText
+                        : $"{streamingConfirmedText} {hypothesisText}";
+                    _engine.ResetStreamingState();
+                    hypothesisText = "";
+
+                    if (segment?.DetectedLanguage != null)
+                        _lastDetectedLanguage = segment.DetectedLanguage;
+                }
+
+                var confirmed = streamingConfirmedText;
+                var hypothesis = hypothesisText;
+                PostUI(() =>
+                {
+                    ConfirmedText = confirmed;
+                    HypothesisText = hypothesis;
+                });
+
+                await Task.Delay(100, ct); // 100ms polling interval
+            }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[TranscriptionService] Streaming loop error: {ex.Message}");
+                try { await Task.Delay(500, ct); } catch (OperationCanceledException) { break; }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Offline chunk-based transcription loop (original loop, used for non-streaming engines).
+    /// </summary>
+    private async Task OfflineLoopAsync(CancellationToken ct)
+    {
         while (!ct.IsCancellationRequested)
         {
             try
@@ -392,8 +510,6 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
                 catch (OperationCanceledException) { break; }
             }
         }
-
-        Debug.WriteLine("[TranscriptionService] Transcription loop ended");
     }
 
     // ── Helpers ──

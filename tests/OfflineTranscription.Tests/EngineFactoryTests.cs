@@ -26,6 +26,15 @@ public class EngineFactoryTests
     }
 
     [Fact]
+    public void Create_SherpaOnnxStreaming_ReturnsSherpaOnnxStreamingEngine()
+    {
+        var model = ModelInfo.AvailableModels.First(m => m.EngineType == EngineType.SherpaOnnxStreaming);
+        using var engine = EngineFactory.Create(model);
+        Assert.IsType<SherpaOnnxStreamingEngine>(engine);
+        Assert.True(engine.IsStreaming);
+    }
+
+    [Fact]
     public void Create_AllModels_ReturnNonNull()
     {
         foreach (var model in ModelInfo.AvailableModels)

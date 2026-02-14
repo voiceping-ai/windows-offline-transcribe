@@ -65,13 +65,30 @@ public sealed partial class SettingsPage : Page
                 return;
         }
 
-        await Service.SelectAndLoadModelAsync(model);
-        UpdateCurrentModelText();
-        Evidence.CaptureModelEvidence(model);
-        _ = Evidence.CaptureScreenshotAsync($"settings_model_loaded_{model.Id}");
+        try
+        {
+            await Service.SelectAndLoadModelAsync(model);
+            UpdateCurrentModelText();
+            Evidence.CaptureModelEvidence(model);
+            _ = Evidence.CaptureScreenshotAsync($"settings_model_loaded_{model.Id}");
 
-        // Navigate back to transcription
-        Frame.Navigate(typeof(TranscriptionPage));
+            // Navigate back to transcription
+            Frame.Navigate(typeof(TranscriptionPage));
+        }
+        catch (Exception ex)
+        {
+            Evidence.LogEvent("settings_model_load_error", new { modelId = model.Id, error = ex.ToString() }, level: "error");
+            _ = Evidence.CaptureScreenshotAsync($"settings_model_error_{model.Id}");
+
+            var dialog = new ContentDialog
+            {
+                Title = "Model Load Failed",
+                Content = ex.Message,
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
     }
 
     private void CopyText_Click(object sender, RoutedEventArgs e)
@@ -103,19 +120,40 @@ public sealed partial class SettingsPage : Page
     private async void EvidenceModeToggle_Toggled(object sender, RoutedEventArgs e)
     {
         if (_initializing) return;
-        Prefs.EvidenceMode = EvidenceModeToggle.IsOn;
-
-        if (Prefs.EvidenceMode)
+        bool previous = Prefs.EvidenceMode;
+        try
         {
-            var session = Evidence.StartNewSession("enabled");
-            await Evidence.CaptureScreenshotAsync("evidence_enabled");
+            Prefs.EvidenceMode = EvidenceModeToggle.IsOn;
 
-            EvidenceStatusText.Text =
-                $"Evidence enabled.\nSession: {session.SessionId}\n{session.SessionDir}";
+            if (Prefs.EvidenceMode)
+            {
+                var session = Evidence.StartNewSession("enabled");
+                await Evidence.CaptureScreenshotAsync("evidence_enabled");
+
+                EvidenceStatusText.Text =
+                    $"Evidence enabled.\nSession: {session.SessionId}\n{session.SessionDir}";
+            }
+            else
+            {
+                EvidenceStatusText.Text = "Evidence mode is off.";
+            }
         }
-        else
+        catch (Exception ex)
         {
-            EvidenceStatusText.Text = "Evidence mode is off.";
+            Evidence.LogEvent("evidence_mode_toggle_failed", new { error = ex.ToString() }, level: "error");
+            Prefs.EvidenceMode = previous;
+            _initializing = true;
+            EvidenceModeToggle.IsOn = Prefs.EvidenceMode;
+            _initializing = false;
+
+            var dialog = new ContentDialog
+            {
+                Title = "Evidence Mode Failed",
+                Content = ex.Message,
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
         }
     }
 
@@ -142,18 +180,33 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        var session = Evidence.StartNewSession("manual");
-        await Evidence.CaptureScreenshotAsync("evidence_session_started");
-        UpdateEvidenceStatusText();
-
-        var ok = new ContentDialog
+        try
         {
-            Title = "Evidence Session Started",
-            Content = session.SessionDir,
-            CloseButtonText = "OK",
-            XamlRoot = this.XamlRoot
-        };
-        await ok.ShowAsync();
+            var session = Evidence.StartNewSession("manual");
+            await Evidence.CaptureScreenshotAsync("evidence_session_started");
+            UpdateEvidenceStatusText();
+
+            var ok = new ContentDialog
+            {
+                Title = "Evidence Session Started",
+                Content = session.SessionDir,
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await ok.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            Evidence.LogEvent("evidence_session_start_failed", new { error = ex.ToString() }, level: "error");
+            var dialog = new ContentDialog
+            {
+                Title = "Start Session Failed",
+                Content = ex.Message,
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
     }
 
     private async void CaptureEvidenceScreenshot_Click(object sender, RoutedEventArgs e)
@@ -171,18 +224,45 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        var path = await Evidence.CaptureScreenshotAsync("manual");
-        UpdateEvidenceStatusText();
-
-        if (path == null) return;
-        var ok = new ContentDialog
+        try
         {
-            Title = "Evidence Screenshot Saved",
-            Content = path,
-            CloseButtonText = "OK",
-            XamlRoot = this.XamlRoot
-        };
-        await ok.ShowAsync();
+            var path = await Evidence.CaptureScreenshotAsync("manual");
+            UpdateEvidenceStatusText();
+
+            if (path == null)
+            {
+                var empty = new ContentDialog
+                {
+                    Title = "Screenshot Not Captured",
+                    Content = "No screenshot was captured. Try again.",
+                    CloseButtonText = "OK",
+                    XamlRoot = this.XamlRoot
+                };
+                await empty.ShowAsync();
+                return;
+            }
+
+            var ok = new ContentDialog
+            {
+                Title = "Evidence Screenshot Saved",
+                Content = path,
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await ok.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            Evidence.LogEvent("evidence_screenshot_failed", new { error = ex.ToString() }, level: "error");
+            var dialog = new ContentDialog
+            {
+                Title = "Capture Failed",
+                Content = ex.Message,
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
     }
 
     private async void ExportEvidenceZip_Click(object sender, RoutedEventArgs e)
@@ -200,34 +280,53 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        var picker = new FileSavePicker();
-        picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
-        picker.FileTypeChoices.Add("ZIP Archive", [".zip"]);
-        picker.SuggestedFileName = $"evidence_{DateTime.Now:yyyyMMdd_HHmmss}";
-
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-        var file = await picker.PickSaveFileAsync();
-        if (file == null) return;
-
-        var tempDir = Path.Combine(Path.GetTempPath(), "OfflineTranscription_EvidenceExport");
-        var zipPath = Evidence.ExportZip(tempDir);
-        if (zipPath == null) return;
-
-        File.Copy(zipPath, file.Path, overwrite: true);
-        try { File.Delete(zipPath); } catch { /* best-effort */ }
-
-        UpdateEvidenceStatusText();
-
-        var ok = new ContentDialog
+        try
         {
-            Title = "Evidence ZIP Exported",
-            Content = file.Path,
-            CloseButtonText = "OK",
-            XamlRoot = this.XamlRoot
-        };
-        await ok.ShowAsync();
+            var picker = new FileSavePicker();
+            picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+            picker.FileTypeChoices.Add("ZIP Archive", [".zip"]);
+            picker.SuggestedFileName = $"evidence_{DateTime.Now:yyyyMMdd_HHmmss}";
+
+            if (App.MainWindow == null)
+                throw new InvalidOperationException("Main window is not available.");
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+            var file = await picker.PickSaveFileAsync();
+            if (file == null) return;
+
+            var tempDir = Path.Combine(Path.GetTempPath(), "OfflineTranscription_EvidenceExport");
+            var zipPath = Evidence.ExportZip(tempDir);
+            if (zipPath == null)
+                throw new IOException("Failed to create evidence ZIP.");
+
+            File.Copy(zipPath, file.Path, overwrite: true);
+            try { File.Delete(zipPath); } catch { /* best-effort */ }
+
+            UpdateEvidenceStatusText();
+
+            var ok = new ContentDialog
+            {
+                Title = "Evidence ZIP Exported",
+                Content = file.Path,
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await ok.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            Evidence.LogEvent("evidence_export_failed", new { error = ex.ToString() }, level: "error");
+            var dialog = new ContentDialog
+            {
+                Title = "Export Failed",
+                Content = ex.Message,
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
     }
 
     private async void SaveScreenshot_Click(object sender, RoutedEventArgs e)
@@ -264,12 +363,14 @@ public sealed partial class SettingsPage : Page
 
     private void VadToggle_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_initializing) return;
         Evidence.LogEvent("settings_vad", new { enabled = Prefs.UseVAD });
         _ = Evidence.CaptureScreenshotAsync("settings_vad");
     }
 
     private void TimestampsToggle_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_initializing) return;
         Evidence.LogEvent("settings_timestamps", new { enabled = Prefs.ShowTimestamps });
         _ = Evidence.CaptureScreenshotAsync("settings_timestamps");
     }

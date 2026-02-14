@@ -58,37 +58,49 @@ public sealed partial class TranscriptionViewModel : ObservableObject
     {
         if (_service.ModelState != ASRModelState.Loaded) return;
 
-        var picker = new FileOpenPicker();
-        picker.FileTypeFilter.Add(".wav");
-        picker.FileTypeFilter.Add(".mp3");
-        picker.SuggestedStartLocation = PickerLocationId.MusicLibrary;
-
-        // WinUI 3 picker needs window handle
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-        var file = await picker.PickSingleFileAsync();
-        if (file == null) return;
-
         try
         {
-            var info = new FileInfo(file.Path);
-            App.Evidence.LogEvent("file_transcribe_selected", new
-            {
-                name = Path.GetFileName(file.Path),
-                sizeBytes = info.Exists ? info.Length : (long?)null
-            });
-            _ = App.Evidence.CaptureScreenshotAsync("file_transcribe_selected");
-        }
-        catch
-        {
-            App.Evidence.LogEvent("file_transcribe_selected", new { name = Path.GetFileName(file.Path) });
-        }
+            var picker = new FileOpenPicker();
+            picker.FileTypeFilter.Add(".wav");
+            picker.FileTypeFilter.Add(".mp3");
+            picker.SuggestedStartLocation = PickerLocationId.MusicLibrary;
 
-        // Decode audio file to 16kHz mono float samples.
-        var samples = await ReadAudioFileAsync(file.Path);
-        if (samples != null)
-        {
+            // WinUI 3 picker needs window handle
+            if (App.MainWindow == null)
+                throw new InvalidOperationException("Main window is not available.");
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+            var file = await picker.PickSingleFileAsync();
+            if (file == null) return;
+
+            try
+            {
+                var info = new FileInfo(file.Path);
+                App.Evidence.LogEvent("file_transcribe_selected", new
+                {
+                    name = Path.GetFileName(file.Path),
+                    sizeBytes = info.Exists ? info.Length : (long?)null
+                });
+                _ = App.Evidence.CaptureScreenshotAsync("file_transcribe_selected");
+            }
+            catch
+            {
+                App.Evidence.LogEvent("file_transcribe_selected", new { name = Path.GetFileName(file.Path) });
+            }
+
+            // Decode audio file to 16kHz mono float samples.
+            var samples = await ReadAudioFileAsync(file.Path);
+            if (samples == null || samples.Length == 0)
+            {
+                App.Evidence.LogEvent("file_transcribe_decode_failed", new
+                {
+                    name = Path.GetFileName(file.Path)
+                });
+                return;
+            }
+
             var result = await _service.TranscribeFileAsync(samples);
 
             // Log evidence with or without full transcript text based on preference.
@@ -111,6 +123,10 @@ public sealed partial class TranscriptionViewModel : ObservableObject
                 });
             }
             _ = App.Evidence.CaptureScreenshotAsync("file_transcribe_done");
+        }
+        catch (Exception ex)
+        {
+            App.Evidence.LogEvent("file_transcribe_exception", new { error = ex.ToString() }, level: "error");
         }
     }
 

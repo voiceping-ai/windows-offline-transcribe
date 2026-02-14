@@ -57,7 +57,23 @@ public sealed partial class TranscriptionPage : Page
         // Auto-load saved model if available
         if (VM.Service.ModelState == ASRModelState.Unloaded)
         {
-            await VM.LoadSavedModelAsync();
+            try
+            {
+                await VM.LoadSavedModelAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Evidence.LogEvent("saved_model_auto_load_failed", new { error = ex.ToString() }, level: "error");
+
+                var dialog = new ContentDialog
+                {
+                    Title = "Model Auto-Load Failed",
+                    Content = ex.Message,
+                    CloseButtonText = "OK",
+                    XamlRoot = this.XamlRoot
+                };
+                await dialog.ShowAsync();
+            }
         }
     }
 

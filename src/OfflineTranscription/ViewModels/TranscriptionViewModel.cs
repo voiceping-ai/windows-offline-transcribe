@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.IO;
+using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using OfflineTranscription.Models;
 using OfflineTranscription.Services;
@@ -168,16 +169,24 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         {
             try
             {
-                using var reader = new NAudio.Wave.AudioFileReader(path);
-                NAudio.Wave.ISampleProvider provider = reader;
+                using var reader = new AudioFileReader(path);
+                ISampleProvider provider = reader;
 
                 // Convert to mono if needed
                 if (provider.WaveFormat.Channels > 1)
-                    provider = provider.ToMono();
+                {
+                    provider = provider.WaveFormat.Channels == 2
+                        ? new StereoToMonoSampleProvider(provider)
+                        {
+                            LeftVolume = 0.5f,
+                            RightVolume = 0.5f
+                        }
+                        : new MultiChannelToMonoSampleProvider(provider);
+                }
 
                 // Resample if needed
                 if (provider.WaveFormat.SampleRate != 16000)
-                    provider = new NAudio.Wave.SampleProviders.WdlResamplingSampleProvider(provider, 16000);
+                    provider = new WdlResamplingSampleProvider(provider, 16000);
 
                 var samples = new List<float>();
                 var buffer = new float[4096];
@@ -194,5 +203,50 @@ public sealed partial class TranscriptionViewModel : ObservableObject
                 return null;
             }
         });
+    }
+
+    /// <summary>
+    /// Down-mix N-channel sample provider to mono by averaging channels.
+    /// Used for multi-channel files where StereoToMono doesn't apply.
+    /// </summary>
+    private sealed class MultiChannelToMonoSampleProvider : ISampleProvider
+    {
+        private readonly ISampleProvider _source;
+        private readonly int _channels;
+        private float[] _sourceBuffer = [];
+
+        public WaveFormat WaveFormat { get; }
+
+        public MultiChannelToMonoSampleProvider(ISampleProvider source)
+        {
+            _source = source;
+            _channels = source.WaveFormat.Channels;
+            if (_channels < 2) throw new ArgumentOutOfRangeException(nameof(source));
+
+            WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(source.WaveFormat.SampleRate, 1);
+        }
+
+        public int Read(float[] buffer, int offset, int count)
+        {
+            if (count <= 0) return 0;
+
+            int neededSourceSamples = count * _channels;
+            if (_sourceBuffer.Length < neededSourceSamples)
+                _sourceBuffer = new float[neededSourceSamples];
+
+            int sourceRead = _source.Read(_sourceBuffer, 0, neededSourceSamples);
+            int framesRead = sourceRead / _channels;
+
+            for (int frame = 0; frame < framesRead; frame++)
+            {
+                float sum = 0;
+                int baseIndex = frame * _channels;
+                for (int ch = 0; ch < _channels; ch++)
+                    sum += _sourceBuffer[baseIndex + ch];
+                buffer[offset + frame] = sum / _channels;
+            }
+
+            return framesRead;
+        }
     }
 }

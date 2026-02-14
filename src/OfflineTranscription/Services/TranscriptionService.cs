@@ -204,7 +204,10 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
             return;
         }
         SessionState = SessionState.Recording;
-        OfflineTranscription.App.Evidence.LogEvent("record_started", _recorder.LastCaptureDiagnostics ?? new { source = source.ToString() });
+        object startPayload = _recorder.LastCaptureDiagnostics is not null
+            ? _recorder.LastCaptureDiagnostics
+            : new { source = source.ToString() };
+        OfflineTranscription.App.Evidence.LogEvent("record_started", startPayload);
 
         // Start transcription loop
         _loopCts = new CancellationTokenSource();
@@ -440,7 +443,7 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
         }
         else
         {
-            window.DispatcherQueue.TryEnqueue(action);
+            window.DispatcherQueue.TryEnqueue(() => action());
         }
     }
 

@@ -80,3 +80,97 @@ jobs:
         with:
           name: windows-test-results
           path: "**/*.trx"
+
+  package-installer:
+    name: Package App + Installer (x64)
+    if: github.event_name != 'pull_request'
+    runs-on: windows-2022
+    needs:
+      - build-windows-app
+      - test-core
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Publish WinUI app
+        shell: pwsh
+        run: |
+          $publishDir = Join-Path $PWD 'artifacts\publish\win-x64'
+          New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
+
+          msbuild src/OfflineTranscription/OfflineTranscription.csproj `
+            /restore `
+            /t:Publish `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:RuntimeIdentifier=win-x64 `
+            /p:SelfContained=true `
+            /p:WindowsPackageType=None `
+            /p:PublishDir="$publishDir\" `
+            /p:ContinuousIntegrationBuild=true `
+            /m
+
+          if (-not (Test-Path (Join-Path $publishDir 'OfflineTranscription.exe'))) {
+            throw "Expected published executable not found in $publishDir"
+          }
+
+      - name: Create portable zip
+        shell: pwsh
+        run: |
+          $publishDir = Join-Path $PWD 'artifacts\publish\win-x64'
+          $zipDir = Join-Path $PWD 'artifacts\portable'
+          New-Item -ItemType Directory -Force -Path $zipDir | Out-Null
+
+          $zipPath = Join-Path $zipDir 'OfflineTranscription-win-x64-portable.zip'
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+
+          Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $zipPath -Force
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $publishDir = Join-Path $PWD 'artifacts\publish\win-x64'
+          $installerDir = Join-Path $PWD 'artifacts\installer'
+          $appVersion = "1.0.$env:GITHUB_RUN_NUMBER"
+          New-Item -ItemType Directory -Force -Path $installerDir | Out-Null
+
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe not found at $iscc"
+          }
+
+          & $iscc "installer\OfflineTranscription.iss" `
+            "/DSourceDir=$publishDir" `
+            "/DOutputDir=$installerDir" `
+            "/DOutputBaseName=OfflineTranscription-win-x64-setup" `
+            "/DAppVersion=$appVersion"
+
+          if (-not (Test-Path (Join-Path $installerDir 'OfflineTranscription-win-x64-setup.exe'))) {
+            throw "Installer output not found in $installerDir"
+          }
+
+      - name: Upload portable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable-win-x64
+          path: artifacts/portable/OfflineTranscription-win-x64-portable.zip
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-win-x64
+          path: artifacts/installer/OfflineTranscription-win-x64-setup.exe

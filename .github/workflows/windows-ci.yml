@@ -1,0 +1,82 @@
+name: Windows CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-windows-app:
+    name: Build WinUI App (x64)
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore solution
+        run: dotnet restore OfflineTranscription.sln
+
+      - name: Build WinUI app
+        run: >
+          dotnet build src/OfflineTranscription/OfflineTranscription.csproj
+          -c Release
+          -r win-x64
+          -p:Platform=x64
+          -p:ContinuousIntegrationBuild=true
+          --no-restore
+
+  test-core:
+    name: Run Core Tests
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore tests
+        run: dotnet restore tests/OfflineTranscription.Tests/OfflineTranscription.Tests.csproj
+
+      - name: Build tests
+        run: >
+          dotnet build tests/OfflineTranscription.Tests/OfflineTranscription.Tests.csproj
+          -c Release
+          -p:Platform=x64
+          --no-restore
+
+      - name: Run tests
+        run: >
+          dotnet test tests/OfflineTranscription.Tests/OfflineTranscription.Tests.csproj
+          -c Release
+          -p:Platform=x64
+          --no-build
+          --verbosity normal
+          --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-test-results
+          path: "**/*.trx"

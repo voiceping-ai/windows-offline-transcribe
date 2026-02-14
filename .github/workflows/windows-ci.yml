@@ -162,6 +162,41 @@ jobs:
             throw "Installer output not found in $installerDir"
           }
 
+      - name: Validate packaged binaries
+        shell: pwsh
+        run: |
+          $portable = Join-Path $PWD 'artifacts\portable\OfflineTranscription-win-x64-portable.zip'
+          $installer = Join-Path $PWD 'artifacts\installer\OfflineTranscription-win-x64-setup.exe'
+
+          if (-not (Test-Path $portable)) {
+            throw "Portable zip missing: $portable"
+          }
+          if (-not (Test-Path $installer)) {
+            throw "Installer missing: $installer"
+          }
+          if ((Get-Item $portable).Length -lt 1MB) {
+            throw "Portable zip is unexpectedly small"
+          }
+          if ((Get-Item $installer).Length -lt 1MB) {
+            throw "Installer is unexpectedly small"
+          }
+
+          $verifyDir = Join-Path $env:RUNNER_TEMP 'portable-verify'
+          if (Test-Path $verifyDir) {
+            Remove-Item -Recurse -Force $verifyDir
+          }
+          Expand-Archive -Path $portable -DestinationPath $verifyDir -Force
+          if (-not (Test-Path (Join-Path $verifyDir 'OfflineTranscription.exe'))) {
+            throw "Portable zip does not contain OfflineTranscription.exe"
+          }
+
+          $checksumFile = Join-Path $PWD 'artifacts\checksums\windows-binaries.sha256'
+          New-Item -ItemType Directory -Force -Path (Split-Path $checksumFile -Parent) | Out-Null
+          @(
+            (Get-FileHash $portable -Algorithm SHA256).Hash.ToLower() + "  OfflineTranscription-win-x64-portable.zip"
+            (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower() + "  OfflineTranscription-win-x64-setup.exe"
+          ) | Set-Content -Path $checksumFile -Encoding ascii
+
       - name: Upload portable zip
         uses: actions/upload-artifact@v4
         with:
@@ -174,6 +209,12 @@ jobs:
           name: windows-installer-win-x64
           path: artifacts/installer/OfflineTranscription-win-x64-setup.exe
 
+      - name: Upload checksum artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binaries-checksums
+          path: artifacts/checksums/windows-binaries.sha256
+
       - name: Publish GitHub release assets
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
@@ -185,5 +226,6 @@ jobs:
           files: |
             artifacts/portable/OfflineTranscription-win-x64-portable.zip
             artifacts/installer/OfflineTranscription-win-x64-setup.exe
+            artifacts/checksums/windows-binaries.sha256
           fail_on_unmatched_files: true
           overwrite_files: true

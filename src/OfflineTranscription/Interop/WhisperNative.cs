@@ -7,32 +7,32 @@ namespace OfflineTranscription.Interop;
 /// Mirrors the Android JNI bridge (whisper_jni.cpp).
 /// whisper.dll must be built from whisper.cpp v1.8.3 with BUILD_SHARED_LIBS=ON.
 /// </summary>
-internal static partial class WhisperNative
+internal static class WhisperNative
 {
     private const string LibName = "whisper";
 
     // ── Context lifecycle ──
 
-    [LibraryImport(LibName, EntryPoint = "whisper_init_from_file_with_params")]
-    internal static partial IntPtr InitFromFile(
+    [DllImport(LibName, EntryPoint = "whisper_init_from_file_with_params", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr InitFromFile(
         [MarshalAs(UnmanagedType.LPUTF8Str)] string pathModel,
         WhisperContextParams cparams);
 
-    [LibraryImport(LibName, EntryPoint = "whisper_free")]
-    internal static partial void Free(IntPtr ctx);
+    [DllImport(LibName, EntryPoint = "whisper_free", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void Free(IntPtr ctx);
 
     // ── Default params ──
 
-    [LibraryImport(LibName, EntryPoint = "whisper_context_default_params")]
-    internal static partial WhisperContextParams ContextDefaultParams();
+    [DllImport(LibName, EntryPoint = "whisper_context_default_params", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern WhisperContextParams ContextDefaultParams();
 
-    [LibraryImport(LibName, EntryPoint = "whisper_full_default_params")]
-    internal static partial WhisperFullParams FullDefaultParams(int strategy);
+    [DllImport(LibName, EntryPoint = "whisper_full_default_params", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern WhisperFullParams FullDefaultParams(int strategy);
 
     // ── Full transcription ──
 
-    [LibraryImport(LibName, EntryPoint = "whisper_full")]
-    internal static partial int Full(
+    [DllImport(LibName, EntryPoint = "whisper_full", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int Full(
         IntPtr ctx,
         WhisperFullParams wparams,
         [In] float[] samples,
@@ -40,25 +40,25 @@ internal static partial class WhisperNative
 
     // ── Segment access ──
 
-    [LibraryImport(LibName, EntryPoint = "whisper_full_n_segments")]
-    internal static partial int FullNSegments(IntPtr ctx);
+    [DllImport(LibName, EntryPoint = "whisper_full_n_segments", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int FullNSegments(IntPtr ctx);
 
-    [LibraryImport(LibName, EntryPoint = "whisper_full_get_segment_text")]
-    internal static partial IntPtr FullGetSegmentText(IntPtr ctx, int iSegment);
+    [DllImport(LibName, EntryPoint = "whisper_full_get_segment_text", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr FullGetSegmentText(IntPtr ctx, int iSegment);
 
-    [LibraryImport(LibName, EntryPoint = "whisper_full_get_segment_t0")]
-    internal static partial long FullGetSegmentT0(IntPtr ctx, int iSegment);
+    [DllImport(LibName, EntryPoint = "whisper_full_get_segment_t0", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern long FullGetSegmentT0(IntPtr ctx, int iSegment);
 
-    [LibraryImport(LibName, EntryPoint = "whisper_full_get_segment_t1")]
-    internal static partial long FullGetSegmentT1(IntPtr ctx, int iSegment);
+    [DllImport(LibName, EntryPoint = "whisper_full_get_segment_t1", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern long FullGetSegmentT1(IntPtr ctx, int iSegment);
 
     // ── Language detection ──
 
-    [LibraryImport(LibName, EntryPoint = "whisper_full_lang_id")]
-    internal static partial int FullLangId(IntPtr ctx);
+    [DllImport(LibName, EntryPoint = "whisper_full_lang_id", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int FullLangId(IntPtr ctx);
 
-    [LibraryImport(LibName, EntryPoint = "whisper_lang_str")]
-    internal static partial IntPtr LangStr(int id);
+    [DllImport(LibName, EntryPoint = "whisper_lang_str", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr LangStr(int id);
 
     // ── Sampling strategies ──
     internal const int WHISPER_SAMPLING_GREEDY = 0;

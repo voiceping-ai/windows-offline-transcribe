@@ -7,39 +7,39 @@ namespace OfflineTranscription.Interop;
 /// sherpa-onnx.dll from GitHub releases bundles ONNX Runtime + DirectML.
 /// Reference: https://github.com/k2-fsa/sherpa-onnx/blob/master/sherpa-onnx/c-api/c-api.h
 /// </summary>
-internal static partial class SherpaOnnxNative
+internal static class SherpaOnnxNative
 {
     private const string LibName = "sherpa-onnx-c-api";
 
     // ── Offline Recognizer ──
 
-    [LibraryImport(LibName, EntryPoint = "SherpaOnnxCreateOfflineRecognizer")]
-    internal static partial IntPtr CreateOfflineRecognizer(ref SherpaOnnxOfflineRecognizerConfig config);
+    [DllImport(LibName, EntryPoint = "SherpaOnnxCreateOfflineRecognizer", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr CreateOfflineRecognizer(ref SherpaOnnxOfflineRecognizerConfig config);
 
-    [LibraryImport(LibName, EntryPoint = "SherpaOnnxDestroyOfflineRecognizer")]
-    internal static partial void DestroyOfflineRecognizer(IntPtr recognizer);
+    [DllImport(LibName, EntryPoint = "SherpaOnnxDestroyOfflineRecognizer", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void DestroyOfflineRecognizer(IntPtr recognizer);
 
-    [LibraryImport(LibName, EntryPoint = "SherpaOnnxCreateOfflineStream")]
-    internal static partial IntPtr CreateOfflineStream(IntPtr recognizer);
+    [DllImport(LibName, EntryPoint = "SherpaOnnxCreateOfflineStream", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr CreateOfflineStream(IntPtr recognizer);
 
-    [LibraryImport(LibName, EntryPoint = "SherpaOnnxDestroyOfflineStream")]
-    internal static partial void DestroyOfflineStream(IntPtr stream);
+    [DllImport(LibName, EntryPoint = "SherpaOnnxDestroyOfflineStream", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void DestroyOfflineStream(IntPtr stream);
 
-    [LibraryImport(LibName, EntryPoint = "SherpaOnnxAcceptWaveformOffline")]
-    internal static partial void AcceptWaveformOffline(
+    [DllImport(LibName, EntryPoint = "SherpaOnnxAcceptWaveformOffline", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void AcceptWaveformOffline(
         IntPtr stream,
         int sampleRate,
         [In] float[] samples,
         int n);
 
-    [LibraryImport(LibName, EntryPoint = "SherpaOnnxDecodeOfflineStream")]
-    internal static partial void DecodeOfflineStream(IntPtr recognizer, IntPtr stream);
+    [DllImport(LibName, EntryPoint = "SherpaOnnxDecodeOfflineStream", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void DecodeOfflineStream(IntPtr recognizer, IntPtr stream);
 
-    [LibraryImport(LibName, EntryPoint = "SherpaOnnxGetOfflineStreamResult")]
-    internal static partial IntPtr GetOfflineStreamResult(IntPtr stream);
+    [DllImport(LibName, EntryPoint = "SherpaOnnxGetOfflineStreamResult", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr GetOfflineStreamResult(IntPtr stream);
 
-    [LibraryImport(LibName, EntryPoint = "SherpaOnnxDestroyOfflineRecognizerResult")]
-    internal static partial void DestroyOfflineRecognizerResult(IntPtr result);
+    [DllImport(LibName, EntryPoint = "SherpaOnnxDestroyOfflineRecognizerResult", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void DestroyOfflineRecognizerResult(IntPtr result);
 
     // ── Helper to read result ──
 

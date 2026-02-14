@@ -10,6 +10,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         this.InitializeComponent();
+        SetWindowIcon();
         ContentFrame.Navigated += ContentFrame_Navigated;
 
         // Navigate to model setup or transcription on launch
@@ -44,6 +45,18 @@ public sealed partial class MainWindow : Window
                     ContentFrame.Navigate(typeof(SettingsPage));
                     break;
             }
+        }
+    }
+
+    private void SetWindowIcon()
+    {
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
+        var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+        if (appWindow is not null && File.Exists(iconPath))
+        {
+            appWindow.SetIcon(iconPath);
         }
     }
 

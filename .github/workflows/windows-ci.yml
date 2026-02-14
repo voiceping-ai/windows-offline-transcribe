@@ -83,7 +83,6 @@ jobs:
 
   package-installer:
     name: Package App + Installer (x64)
-    if: github.event_name != 'pull_request'
     runs-on: windows-2022
     needs:
       - build-windows-app

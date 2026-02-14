@@ -30,17 +30,17 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Restore solution
-        run: dotnet restore OfflineTranscription.sln
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
 
       - name: Build WinUI app
         run: >
-          dotnet build src/OfflineTranscription/OfflineTranscription.csproj
-          -c Release
-          -r win-x64
-          -p:Platform=x64
-          -p:ContinuousIntegrationBuild=true
-          --no-restore
+          msbuild src/OfflineTranscription/OfflineTranscription.csproj
+          /restore
+          /p:Configuration=Release
+          /p:Platform=x64
+          /p:ContinuousIntegrationBuild=true
+          /m
 
   test-core:
     name: Run Core Tests

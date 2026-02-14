@@ -48,7 +48,7 @@ public class ModelDownloaderTests : IDisposable
         var whisper = ModelInfo.AvailableModels.First(m => m.EngineType == EngineType.WhisperCpp);
         var path = ModelDownloader.GetModelPath(whisper);
         // WhisperCpp returns the actual .bin file path
-        Assert.EndsWith("ggml-base.bin", path);
+        Assert.EndsWith(whisper.Files[0].LocalName, path);
     }
 
     [Fact]

@@ -1,0 +1,39 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Bb]uild/
+x64/
+x86/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Test output
+[Tt]est[Rr]esult*/
+*.trx
+coverage/
+coverage-*/
+
+# Logs / temp
+*.log
+*.tmp
+*.cache
+
+# Local env / secrets
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local generated artifacts
+artifacts/
+screen_*.png
+screen_*.ppm

@@ -116,10 +116,24 @@ jobs:
             /p:WindowsPackageType=None `
             /p:PublishDir="$publishDir\" `
             /p:ContinuousIntegrationBuild=true `
+            /p:GeneratePriFilesOnBuild=true `
             /m
 
           if (-not (Test-Path (Join-Path $publishDir 'OfflineTranscription.exe'))) {
             throw "Expected published executable not found in $publishDir"
+          }
+
+          # Ensure PRI resource file is in publish output (required for WinUI XAML)
+          $buildDir = Join-Path $PWD 'src\OfflineTranscription\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64'
+          $priFile = Join-Path $publishDir 'OfflineTranscription.pri'
+          if (-not (Test-Path $priFile)) {
+            $srcPri = Join-Path $buildDir 'OfflineTranscription.pri'
+            if (Test-Path $srcPri) {
+              Copy-Item $srcPri $priFile
+              Write-Host "Copied OfflineTranscription.pri from build output"
+            } else {
+              throw "OfflineTranscription.pri not found in build or publish output"
+            }
           }
 
       - name: Create portable zip
@@ -188,6 +202,9 @@ jobs:
           Expand-Archive -Path $portable -DestinationPath $verifyDir -Force
           if (-not (Test-Path (Join-Path $verifyDir 'OfflineTranscription.exe'))) {
             throw "Portable zip does not contain OfflineTranscription.exe"
+          }
+          if (-not (Test-Path (Join-Path $verifyDir 'OfflineTranscription.pri'))) {
+            throw "Portable zip does not contain OfflineTranscription.pri (WinUI XAML resources)"
           }
 
           $checksumFile = Join-Path $PWD 'artifacts\checksums\windows-binaries.sha256'

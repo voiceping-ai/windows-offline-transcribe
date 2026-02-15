@@ -5,6 +5,18 @@ All ASR inference runs locally after model download.
 
 This repo also supports an optional **Translate** mode (offline MT + optional TTS) in the same app.
 
+## Screenshots
+
+| Main Screen | File Transcription | Settings |
+|---|---|---|
+| ![Main](docs/images/app-main.png) | ![File Transcription](docs/images/app-file-transcription.png) | ![Settings](docs/images/app-settings.png) |
+
+### File Transcription Demo
+
+![File Transcription Demo](docs/images/demo-file-transcription.gif)
+
+Select an audio file (.wav / .mp3) and get the transcript in seconds — all processing runs locally.
+
 ## Current Scope (Code-Accurate)
 
 - Live transcription with confirmed text plus rolling hypothesis.

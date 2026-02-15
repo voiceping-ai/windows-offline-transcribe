@@ -43,4 +43,3 @@ Open `OfflineTranscription.sln` and build `x64` (`Debug` or `Release`).
 
 The test project is `tests/OfflineTranscription.Tests/OfflineTranscription.Tests.csproj`.
 It compiles non-UI code directly (WinUI projects cannot be referenced from a plain .NET test project).
-# windows-offline-transcribe

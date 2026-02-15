@@ -32,6 +32,8 @@ Models are downloaded from Hugging Face at runtime and stored under `%LOCALAPPDA
 
 Model weights are not distributed with this repo; model licensing varies. See `NOTICE`.
 
+> **Want to see a new model or device benchmark?** If there is an offline ASR model you would like added, or you have benchmark results to share from your hardware, please [open an issue](https://github.com/atyenoria/windows-offline-transcribe/issues/new). Community contributions of inference benchmarks on different Windows devices are welcome.
+
 ## Engines / Inference Methods
 
 This app has two inference paths:

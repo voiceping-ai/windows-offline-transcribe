@@ -68,6 +68,13 @@ public class ModelDownloaderTests : IDisposable
         // (unless previously downloaded — but we test the logic, not the state)
         foreach (var model in ModelInfo.AvailableModels)
         {
+            // Zero-file models (e.g. windows-speech) are always "downloaded"
+            if (model.Files.Count == 0)
+            {
+                Assert.True(ModelDownloader.IsModelDownloaded(model));
+                continue;
+            }
+
             var dir = ModelDownloader.GetModelDir(model);
             // Only assert false if the directory doesn't exist
             if (!Directory.Exists(dir))

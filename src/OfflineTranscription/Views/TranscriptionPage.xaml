@@ -73,7 +73,7 @@
                 <SymbolIcon Symbol="OpenFile" />
             </Button>
 
-            <Button Grid.Column="1" Margin="8,0,0,0"
+            <Button x:Name="TestAudioButton" Grid.Column="1" Margin="8,0,0,0"
                     Command="{x:Bind VM.TranscribeTestAudioCommand}"
                     ToolTipService.ToolTip="Transcribe embedded test audio">
                 <SymbolIcon Symbol="Play" />

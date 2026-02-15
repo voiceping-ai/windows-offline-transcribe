@@ -96,6 +96,47 @@ public class EngineStateTests
         Assert.True(ex == null || ex is ObjectDisposedException);
     }
 
+    // ── QwenAsrEngine ──
+
+    [Fact]
+    public void QwenAsr_StartsUnloaded()
+    {
+        using var engine = new QwenAsrEngine();
+        Assert.False(engine.IsLoaded);
+    }
+
+    [Fact]
+    public void QwenAsr_IsNotStreaming()
+    {
+        using var engine = new QwenAsrEngine();
+        Assert.False(engine.IsStreaming);
+    }
+
+    [Fact]
+    public async Task QwenAsr_TranscribeReturnsEmpty_WhenNotLoaded()
+    {
+        using var engine = new QwenAsrEngine();
+        var result = await engine.TranscribeAsync(new float[16000], 4, "auto");
+        Assert.Equal(ASRResult.Empty, result);
+    }
+
+    [Fact]
+    public void QwenAsr_ReleaseIsSafe_WhenNotLoaded()
+    {
+        using var engine = new QwenAsrEngine();
+        engine.Release(); // Should not throw
+        Assert.False(engine.IsLoaded);
+    }
+
+    [Fact]
+    public void QwenAsr_DoubleDispose_IsSafe()
+    {
+        var engine = new QwenAsrEngine();
+        engine.Dispose();
+        var ex = Record.Exception(() => engine.Dispose());
+        Assert.True(ex == null || ex is ObjectDisposedException);
+    }
+
     // ── IASREngine default implementations ──
 
     [Fact]

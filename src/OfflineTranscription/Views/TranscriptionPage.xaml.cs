@@ -45,6 +45,9 @@ public sealed partial class TranscriptionPage : Page
     public TranscriptionPage()
     {
         this.InitializeComponent();
+#if !DEBUG
+        TestAudioButton.Visibility = Visibility.Collapsed;
+#endif
         Loaded += (_, _) => AttachServiceHandlers();
         Unloaded += (_, _) => DetachServiceHandlers();
     }
@@ -76,6 +79,7 @@ public sealed partial class TranscriptionPage : Page
             }
         }
 
+#if DEBUG
         // Auto-transcribe test audio if trigger file or --test-audio argument is present
         var triggerFile = Path.Combine(AppContext.BaseDirectory, "test-audio.trigger");
         var args = Environment.GetCommandLineArgs();
@@ -85,6 +89,7 @@ public sealed partial class TranscriptionPage : Page
             try { File.Delete(triggerFile); } catch { }
             await VM.TranscribeTestAudioCommand.ExecuteAsync(null);
         }
+#endif
     }
 
     private void RecordButton_Click(object sender, RoutedEventArgs e)

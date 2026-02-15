@@ -2,7 +2,7 @@ namespace OfflineTranscription.Models;
 
 /// <summary>
 /// Metadata for an available ASR model. Port of Android ModelInfo.kt.
-/// 9 models across 3 engine types matching Android parity.
+/// 12 models across 5 engine types.
 /// </summary>
 public record ModelInfo(
     string Id,
@@ -21,6 +21,8 @@ public record ModelInfo(
         EngineType.WhisperCpp => "whisper.cpp (C++/P-Invoke)",
         EngineType.SherpaOnnxOffline => "sherpa-onnx offline (ONNX Runtime)",
         EngineType.SherpaOnnxStreaming => "sherpa-onnx streaming (ONNX Runtime)",
+        EngineType.WindowsSpeech => "Windows Speech API (WinRT)",
+        EngineType.QwenAsr => "qwen-asr (C/P-Invoke)",
         _ => "Unknown"
     };
 
@@ -44,6 +46,12 @@ public record ModelInfo(
     private const string ZipformerEnBaseUrl =
         "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26/resolve/main/";
 
+    private const string ParakeetV2BaseUrl =
+        "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/";
+
+    private const string Qwen3Asr06BBaseUrl =
+        "https://huggingface.co/Qwen/Qwen3-ASR-0.6B/resolve/main/";
+
     private static IReadOnlyList<ModelFile> MoonshineFiles(string baseUrl) =>
     [
         new($"{baseUrl}preprocess.onnx", "preprocess.onnx"),
@@ -54,7 +62,7 @@ public record ModelInfo(
     ];
 
     /// <summary>
-    /// All available models (9 models across 3 engine types, matching Android parity).
+    /// All available models (12 models across 5 engine types).
     /// </summary>
     public static IReadOnlyList<ModelInfo> AvailableModels { get; } =
     [
@@ -158,6 +166,25 @@ public record ModelInfo(
             SherpaModelType: Models.SherpaModelType.OmnilingualCtc
         ),
 
+        // ── Parakeet TDT v2 (sherpa-onnx offline, NemoTransducer) ──
+        new(
+            Id: "parakeet-tdt-v2",
+            DisplayName: "Parakeet TDT v2",
+            EngineType: EngineType.SherpaOnnxOffline,
+            ParameterCount: "600M",
+            SizeOnDisk: "~660 MB",
+            Description: "NVIDIA Parakeet TDT v2. Fast English transducer, int8 quantized.",
+            Languages: "English",
+            Files:
+            [
+                new($"{ParakeetV2BaseUrl}encoder.int8.onnx", "encoder.int8.onnx"),
+                new($"{ParakeetV2BaseUrl}decoder.int8.onnx", "decoder.int8.onnx"),
+                new($"{ParakeetV2BaseUrl}joiner.int8.onnx", "joiner.int8.onnx"),
+                new($"{ParakeetV2BaseUrl}tokens.txt", "tokens.txt"),
+            ],
+            SherpaModelType: Models.SherpaModelType.NemoTransducer
+        ),
+
         // ── Zipformer Streaming (sherpa-onnx streaming) ──
         new(
             Id: "zipformer-20m",
@@ -178,6 +205,36 @@ public record ModelInfo(
                 new($"{ZipformerEnBaseUrl}tokens.txt", "tokens.txt"),
             ],
             SherpaModelType: Models.SherpaModelType.ZipformerTransducer
+        ),
+        // ── Qwen3-ASR (qwen-asr C engine) ──
+        new(
+            Id: "qwen3-asr-0.6b",
+            DisplayName: "Qwen3 ASR 0.6B",
+            EngineType: EngineType.QwenAsr,
+            ParameterCount: "600M",
+            SizeOnDisk: "~1.9 GB",
+            Description: "Qwen3 ASR 0.6B. 52 languages, BF16 safetensors via qwen-asr C engine.",
+            Languages: "52 languages",
+            Files:
+            [
+                new($"{Qwen3Asr06BBaseUrl}model.safetensors", "model.safetensors"),
+                new($"{Qwen3Asr06BBaseUrl}vocab.json", "vocab.json"),
+                new($"{Qwen3Asr06BBaseUrl}merges.txt", "merges.txt"),
+                new($"{Qwen3Asr06BBaseUrl}config.json", "config.json"),
+                new($"{Qwen3Asr06BBaseUrl}generation_config.json", "generation_config.json"),
+            ]
+        ),
+
+        // ── Windows Speech API (built-in) ──
+        new(
+            Id: "windows-speech",
+            DisplayName: "Windows Speech (Built-in)",
+            EngineType: EngineType.WindowsSpeech,
+            ParameterCount: "N/A",
+            SizeOnDisk: "0 MB (pre-installed)",
+            Description: "Windows built-in recognizer. Limited accuracy. Requires language pack install.",
+            Languages: "Depends on installed language packs",
+            Files: []
         ),
     ];
 

@@ -62,9 +62,10 @@ public partial class App : Application
     {
         var basePath = AppContext.BaseDirectory;
 
-        // Pre-load ggml dependency DLLs so the Windows loader can find them
-        // when whisper.dll is loaded (whisper.dll imports ggml.dll and ggml-base.dll).
-        foreach (var dep in new[] { "ggml-base", "ggml-cpu", "ggml" })
+        // Pre-load dependency DLLs so the Windows loader can find them.
+        // ggml: whisper.dll imports ggml.dll and ggml-base.dll.
+        // libopenblas: qwen_asr.dll links against OpenBLAS.
+        foreach (var dep in new[] { "ggml-base", "ggml-cpu", "ggml", "libopenblas" })
         {
             var depPath = Path.Combine(basePath, $"{dep}.dll");
             if (File.Exists(depPath))
@@ -82,12 +83,24 @@ public partial class App : Application
             // Check runtimes/win-x64/ subfolder
             var runtimePath = Path.Combine(basePath, "runtimes", "win-x64", $"{name}.dll");
             if (File.Exists(runtimePath))
-                return NativeLibrary.Load(runtimePath);
+            {
+                try { return NativeLibrary.Load(runtimePath); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Failed to load {runtimePath}: {ex.Message}");
+                }
+            }
 
             // Check app base directory directly
             var directPath = Path.Combine(basePath, $"{name}.dll");
             if (File.Exists(directPath))
-                return NativeLibrary.Load(directPath);
+            {
+                try { return NativeLibrary.Load(directPath); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Failed to load {directPath}: {ex.Message}");
+                }
+            }
 
             // Fallback to default resolution
             return IntPtr.Zero;

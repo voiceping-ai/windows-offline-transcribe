@@ -35,10 +35,21 @@ public class EngineFactoryTests
     }
 
     [Fact]
+    public void Create_QwenAsr_ReturnsQwenAsrEngine()
+    {
+        var model = ModelInfo.AvailableModels.First(m => m.EngineType == EngineType.QwenAsr);
+        using var engine = EngineFactory.Create(model);
+        Assert.IsType<QwenAsrEngine>(engine);
+    }
+
+    [Fact]
     public void Create_AllModels_ReturnNonNull()
     {
         foreach (var model in ModelInfo.AvailableModels)
         {
+            // WindowsSpeech requires WinRT APIs not available in plain net8.0 test TFM
+            if (model.EngineType == EngineType.WindowsSpeech) continue;
+
             using var engine = EngineFactory.Create(model);
             Assert.NotNull(engine);
         }
@@ -49,6 +60,8 @@ public class EngineFactoryTests
     {
         foreach (var model in ModelInfo.AvailableModels)
         {
+            if (model.EngineType == EngineType.WindowsSpeech) continue;
+
             using var engine = EngineFactory.Create(model);
             Assert.False(engine.IsLoaded);
         }

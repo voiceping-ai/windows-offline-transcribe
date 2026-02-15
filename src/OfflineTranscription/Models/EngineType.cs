@@ -7,7 +7,9 @@ public enum EngineType
 {
     WhisperCpp,
     SherpaOnnxOffline,
-    SherpaOnnxStreaming
+    SherpaOnnxStreaming,
+    WindowsSpeech,
+    QwenAsr
 }
 
 /// <summary>
@@ -18,5 +20,6 @@ public enum SherpaModelType
     Moonshine,
     SenseVoice,
     OmnilingualCtc,
-    ZipformerTransducer
+    ZipformerTransducer,
+    NemoTransducer
 }

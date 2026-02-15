@@ -147,7 +147,13 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
                 // Configure chunk manager per model (streaming engines handle their own windowing)
                 if (!_engine.IsStreaming)
                 {
-                    float chunkSec = model.EngineType == EngineType.SherpaOnnxOffline ? 3.5f : 15f;
+                    float chunkSec = model.EngineType switch
+                    {
+                        EngineType.SherpaOnnxOffline => 3.5f,
+                        EngineType.WindowsSpeech => 10f,
+                        EngineType.QwenAsr => 15f,
+                        _ => 15f
+                    };
                     _chunkManager = new StreamingChunkManager(chunkSec);
                 }
             }

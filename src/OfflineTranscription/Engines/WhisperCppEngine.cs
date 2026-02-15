@@ -81,19 +81,29 @@ public sealed class WhisperCppEngine : IASREngine
                 wparams.print_realtime = false;
                 wparams.print_timestamps = false;
 
-                var logPath = Path.Combine(AppContext.BaseDirectory, "whisper-debug.log");
-                void Log(string msg) { try { File.AppendAllText(logPath, msg + "\n"); } catch { } Debug.WriteLine(msg); }
+                if (string.IsNullOrEmpty(language) || language == "auto")
+                {
+                    wparams.detect_language = true;
+                }
+                else
+                {
+                    wparams.language = Marshal.StringToCoTaskMemUTF8(language);
+                    wparams.detect_language = false;
+                }
 
-                Log($"[WhisperCpp] Transcribing {audioSamples.Length} samples ({audioSamples.Length / 16000.0:F1}s) with {numThreads} threads, lang={language}");
-                Log($"[WhisperCpp] WhisperFullParams size: {Marshal.SizeOf<WhisperFullParams>()} bytes");
-                // Check audio samples are not all zeros
-                float maxAbs = 0;
-                for (int s = 0; s < Math.Min(audioSamples.Length, 16000); s++)
-                    if (Math.Abs(audioSamples[s]) > maxAbs) maxAbs = Math.Abs(audioSamples[s]);
-                Log($"[WhisperCpp] First 1s max amplitude: {maxAbs:F6}");
+                Debug.WriteLine($"[WhisperCpp] Transcribing {audioSamples.Length} samples ({audioSamples.Length / 16000.0:F1}s) with {numThreads} threads, lang={language}");
 
-                int ret = WhisperNative.Full(ctx, wparams, audioSamples, audioSamples.Length);
-                Log($"[WhisperCpp] whisper_full returned {ret}");
+                int ret;
+                try
+                {
+                    ret = WhisperNative.Full(ctx, wparams, audioSamples, audioSamples.Length);
+                }
+                finally
+                {
+                    if (wparams.language != IntPtr.Zero)
+                        Marshal.FreeCoTaskMem(wparams.language);
+                }
+                Debug.WriteLine($"[WhisperCpp] whisper_full returned {ret}");
 
                 if (ret != 0)
                     return ASRResult.Empty;
@@ -105,15 +115,15 @@ public sealed class WhisperCppEngine : IASREngine
                     int langId = WhisperNative.FullLangId(ctx);
                     var langStrPtr = WhisperNative.LangStr(langId);
                     detectedLang = Marshal.PtrToStringUTF8(langStrPtr);
-                    Log($"[WhisperCpp] Detected language: {detectedLang} (id={langId})");
+                    Debug.WriteLine($"[WhisperCpp] Detected language: {detectedLang} (id={langId})");
                 }
                 catch (Exception ex)
                 {
-                    Log($"[WhisperCpp] Language detection error: {ex.Message}");
+                    Debug.WriteLine($"[WhisperCpp] Language detection error: {ex.Message}");
                 }
 
                 int nSegments = WhisperNative.FullNSegments(ctx);
-                Log($"[WhisperCpp] nSegments={nSegments}");
+                Debug.WriteLine($"[WhisperCpp] nSegments={nSegments}");
 
                 var segments = new List<ASRSegment>(nSegments);
                 var fullText = new System.Text.StringBuilder();
@@ -125,13 +135,13 @@ public sealed class WhisperCppEngine : IASREngine
                     var t0 = WhisperNative.FullGetSegmentT0(ctx, i) * 10; // centiseconds → ms
                     var t1 = WhisperNative.FullGetSegmentT1(ctx, i) * 10;
 
-                    Log($"[WhisperCpp] Segment {i}: [{t0}-{t1}ms] '{text}'");
+                    Debug.WriteLine($"[WhisperCpp] Segment {i}: [{t0}-{t1}ms] '{text}'");
                     segments.Add(new ASRSegment(text.Trim(), t0, t1));
                     fullText.Append(text);
                 }
 
                 var finalText = fullText.ToString().Trim();
-                Log($"[WhisperCpp] Final text: '{finalText}'");
+                Debug.WriteLine($"[WhisperCpp] Final text: '{finalText}'");
 
                 return new ASRResult(
                     finalText,

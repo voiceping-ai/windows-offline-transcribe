@@ -7,7 +7,7 @@ All ASR inference runs locally after model download.
 
 - Live transcription with confirmed text plus rolling hypothesis.
 - Audio source switching: `Microphone`, `System Audio (WASAPI loopback)`.
-- In-app model download/load/switch (9 models across 3 engine types).
+- In-app model download/load/switch (12 models across 5 engine types).
 - File transcription (`.wav`, `.mp3`).
 - Runtime stats while recording (`CPU`, `RAM`, `tok/s`, elapsed audio). Note: `tok/s` is a rough word-per-second estimate.
 - History: saves transcript + session audio; export a shareable ZIP (text + metadata + audio).
@@ -28,15 +28,37 @@ Models are downloaded from Hugging Face at runtime and stored under `%LOCALAPPDA
 | `moonshine-tiny` | sherpa-onnx offline (ONNX Runtime) | 27M | ~125 MB | English |
 | `moonshine-base` | sherpa-onnx offline (ONNX Runtime) | 61M | ~290 MB | English |
 | `omnilingual-300m` | sherpa-onnx offline (ONNX Runtime) | 300M | ~365 MB | 1,600+ languages |
+| `parakeet-tdt-v2` | sherpa-onnx offline (ONNX Runtime) | 600M | ~660 MB | English |
 | `zipformer-20m` | sherpa-onnx streaming (ONNX Runtime) | 20M | ~73 MB | English |
+| `qwen3-asr-0.6b` | qwen-asr (C/P-Invoke) | 600M | ~1.9 GB | 52 languages |
+| `windows-speech` | Windows Speech API (WinRT) | N/A | 0 MB | Installed language packs |
 
 Model weights are not distributed with this repo; model licensing varies. See `NOTICE`.
+
+### Benchmark Results
+
+All models tested on JFK inauguration excerpt (11s audio, 22 words).
+Device: Intel Core i5-1035G1 @ 1.00 GHz (4C/8T), 8 GB RAM, CPU-only (no GPU).
+
+| Model | Inference (ms) | RTF | Words/sec | Notes |
+|---|---:|---:|---:|---|
+| moonshine-tiny | 383 | 0.035x | 57.5 | Fastest. English only, no punctuation. |
+| sensevoice-small | 443 | 0.040x | 49.6 | 5 languages, no punctuation. |
+| moonshine-base | 653 | 0.059x | 33.7 | English only, no punctuation. |
+| **parakeet-tdt-v2** | **984** | **0.089x** | **22.4** | **Best quality/speed. Full punctuation.** |
+| zipformer-20m | 1,312 | 0.119x | 16.8 | Streaming model. ALL CAPS output. |
+| whisper-tiny | 1,811 | 0.165x | 12.1 | 99 languages, full punctuation. |
+| whisper-base | 3,907 | 0.355x | 5.6 | 99 languages, full punctuation. |
+| **qwen3-asr-0.6b** | **13,632** | **1.239x** | **1.6** | **Best quality. 52 languages. Slow on CPU.** |
+| whisper-small | 18,942 | 1.722x | 1.2 | 99 languages, full punctuation. |
+
+RTF = Real-Time Factor (lower = faster). RTF < 1.0 means faster than real-time.
 
 > **Want to see a new model or device benchmark?** If there is an offline ASR model you would like added, or you have benchmark results to share from your hardware, please [open an issue](https://github.com/atyenoria/windows-offline-transcribe/issues/new). Community contributions of inference benchmarks on different Windows devices are welcome.
 
 ## Engines / Inference Methods
 
-This app has two inference paths:
+This app has multiple inference paths:
 
 ### Live Recording (Microphone / Loopback)
 
@@ -57,6 +79,18 @@ Provider selection:
 
 - Uses NAudio to decode audio, resamples to 16 kHz mono Float32, and runs a single engine pass.
 
+### Qwen-ASR (C engine)
+
+- `qwen-asr` (antirez/qwen-asr): native C engine for Qwen3-ASR models.
+- Uses memory-mapped BF16 safetensors with OpenBLAS for inference.
+- Requires compiling `qwen_asr.dll` from source (see Native Dependencies).
+
+### Windows Speech API
+
+- `WindowsSpeech`: built-in Windows recognizer via WinRT `SpeechRecognizer`.
+- Works offline if the Windows language pack is installed.
+- Limited accuracy compared to neural ASR models. No native DLLs required.
+
 ## Prereqs
 
 - Windows 10/11 (x64)
@@ -69,6 +103,8 @@ This app uses native engines via P/Invoke:
 
 - whisper.cpp: `whisper.dll` (see `src/OfflineTranscription/Interop/WhisperNative.cs`)
 - sherpa-onnx C API: `sherpa-onnx-c-api.dll` (see `src/OfflineTranscription/Interop/SherpaOnnxNative.cs`)
+- qwen-asr: `qwen_asr.dll` + `libopenblas.dll` (see `src/OfflineTranscription/Interop/QwenAsrNative.cs`)
+- Windows Speech: no native DLLs needed (WinRT API)
 
 Place required `.dll` files in:
 
@@ -78,6 +114,9 @@ They are copied to the build output directory by `src/OfflineTranscription/Offli
 
 If you use the sherpa-onnx release bundle, make sure you also include its dependent DLLs
 (for example `onnxruntime.dll` and DirectML-related DLLs if applicable).
+
+For qwen-asr, compile `qwen_asr.dll` from [antirez/qwen-asr](https://github.com/antirez/qwen-asr) source
+and place alongside `libopenblas.dll` (from [OpenMathLib/OpenBLAS releases](https://github.com/OpenMathLib/OpenBLAS/releases)).
 
 ## Build
 

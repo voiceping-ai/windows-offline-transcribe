@@ -34,6 +34,7 @@ public sealed class ModelDownloader
     /// </summary>
     public static bool IsModelDownloaded(ModelInfo model)
     {
+        if (model.Files.Count == 0) return true;
         var dir = GetModelDir(model);
         return model.Files.All(f => File.Exists(Path.Combine(dir, f.LocalName)));
     }
@@ -44,6 +45,7 @@ public sealed class ModelDownloader
     /// </summary>
     public static string GetModelPath(ModelInfo model)
     {
+        if (model.Files.Count == 0) return GetModelDir(model);
         var dir = GetModelDir(model);
         return model.EngineType == EngineType.WhisperCpp
             ? Path.Combine(dir, model.Files[0].LocalName)
@@ -53,7 +55,7 @@ public sealed class ModelDownloader
     /// <summary>
     /// Try to delete a file, retrying briefly if it is locked by another process.
     /// </summary>
-    private static void TryDeleteFile(string path)
+    private static async Task TryDeleteFileAsync(string path)
     {
         if (!File.Exists(path)) return;
         for (int attempt = 0; attempt < 5; attempt++)
@@ -65,7 +67,7 @@ public sealed class ModelDownloader
             }
             catch (IOException) when (attempt < 4)
             {
-                Thread.Sleep(500);
+                await Task.Delay(500);
             }
         }
     }
@@ -74,7 +76,7 @@ public sealed class ModelDownloader
     /// Try to move/rename a file, retrying with delays to handle transient locks
     /// (e.g. Windows Defender scanning the file after write).
     /// </summary>
-    private static void TryMoveFile(string source, string dest)
+    private static async Task TryMoveFileAsync(string source, string dest)
     {
         for (int attempt = 0; attempt < 10; attempt++)
         {
@@ -86,7 +88,7 @@ public sealed class ModelDownloader
             catch (IOException) when (attempt < 9)
             {
                 Debug.WriteLine($"[ModelDownloader] File.Move attempt {attempt + 1} failed, retrying...");
-                Thread.Sleep(1000);
+                await Task.Delay(1000);
             }
         }
     }
@@ -100,7 +102,7 @@ public sealed class ModelDownloader
         int fileIndex, int totalFiles,
         IProgress<double>? progress, CancellationToken ct)
     {
-        TryDeleteFile(tempPath);
+        await TryDeleteFileAsync(tempPath);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
@@ -131,12 +133,12 @@ public sealed class ModelDownloader
 
         if (totalBytes > 0 && bytesWritten != totalBytes)
         {
-            TryDeleteFile(tempPath);
+            await TryDeleteFileAsync(tempPath);
             throw new IOException(
                 $"Download incomplete for {Path.GetFileName(targetPath)}: expected {totalBytes} bytes, got {bytesWritten}");
         }
 
-        TryMoveFile(tempPath, targetPath);
+        await TryMoveFileAsync(tempPath, targetPath);
         progress?.Report((fileIndex + 1.0) / totalFiles);
     }
 
@@ -149,6 +151,12 @@ public sealed class ModelDownloader
         IProgress<double>? progress = null,
         CancellationToken ct = default)
     {
+        if (model.Files.Count == 0)
+        {
+            progress?.Report(1.0);
+            return;
+        }
+
         var dir = GetModelDir(model);
         Directory.CreateDirectory(dir);
 
@@ -235,12 +243,12 @@ public sealed class ModelDownloader
 
                         if (totalBytes > 0 && bytesWritten != totalBytes)
                         {
-                            TryDeleteFile(tempPath);
+                            await TryDeleteFileAsync(tempPath);
                             throw new IOException(
                                 $"Download incomplete for {file.LocalName}: expected {totalBytes} bytes, got {bytesWritten}");
                         }
 
-                        TryMoveFile(tempPath, targetPath);
+                        await TryMoveFileAsync(tempPath, targetPath);
                         Debug.WriteLine($"[ModelDownloader] Resumed {file.LocalName}");
                         progress?.Report((i + 1.0) / totalFiles);
                         continue;

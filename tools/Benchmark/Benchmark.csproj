@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.*" />
+  </ItemGroup>
+
+  <!-- Include engine + interop source files directly -->
+  <ItemGroup>
+    <Compile Include="..\..\src\OfflineTranscription\Models\*.cs" LinkBase="Models" />
+    <Compile Include="..\..\src\OfflineTranscription\Interfaces\*.cs" LinkBase="Interfaces" />
+    <Compile Include="..\..\src\OfflineTranscription\Engines\*.cs" LinkBase="Engines" />
+    <!-- Exclude WindowsSpeechEngine (WinRT) -->
+    <Compile Remove="..\..\src\OfflineTranscription\Engines\WindowsSpeechEngine.cs" />
+    <Compile Include="..\..\src\OfflineTranscription\Interop\*.cs" LinkBase="Interop" />
+    <Compile Include="..\..\src\OfflineTranscription\Services\ModelDownloader.cs" Link="Services\ModelDownloader.cs" />
+    <Compile Include="..\..\src\OfflineTranscription\Services\EngineFactory.cs" Link="Services\EngineFactory.cs" />
+  </ItemGroup>
+
+  <!-- Native DLLs -->
+  <ItemGroup>
+    <Content Include="..\..\libs\runtimes\win-x64\*.dll" Condition="Exists('..\..\libs\runtimes\win-x64\')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>%(Filename)%(Extension)</Link>
+    </Content>
+  </ItemGroup>
+</Project>

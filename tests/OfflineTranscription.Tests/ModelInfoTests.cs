@@ -7,8 +7,8 @@ public class ModelInfoTests
     [Fact]
     public void AvailableModels_HasExpectedCount()
     {
-        // 4 whisper + 2 moonshine + 1 sensevoice + 1 omnilingual + 1 zipformer = 9
-        Assert.Equal(9, ModelInfo.AvailableModels.Count);
+        // 4 whisper + 2 moonshine + 1 sensevoice + 1 omnilingual + 1 parakeet + 1 zipformer + 1 qwen3 + 1 windows-speech = 12
+        Assert.Equal(12, ModelInfo.AvailableModels.Count);
     }
 
     [Fact]
@@ -18,11 +18,18 @@ public class ModelInfoTests
     }
 
     [Fact]
-    public void AllModels_HaveFiles()
+    public void AllModels_HaveFiles_ExceptWindowsSpeech()
     {
         foreach (var model in ModelInfo.AvailableModels)
         {
-            Assert.NotEmpty(model.Files);
+            if (model.EngineType == EngineType.WindowsSpeech)
+            {
+                Assert.Empty(model.Files);
+            }
+            else
+            {
+                Assert.NotEmpty(model.Files);
+            }
         }
     }
 
@@ -54,10 +61,14 @@ public class ModelInfoTests
         Assert.True(byEngine.ContainsKey(EngineType.WhisperCpp));
         Assert.True(byEngine.ContainsKey(EngineType.SherpaOnnxOffline));
         Assert.True(byEngine.ContainsKey(EngineType.SherpaOnnxStreaming));
+        Assert.True(byEngine.ContainsKey(EngineType.QwenAsr));
+        Assert.True(byEngine.ContainsKey(EngineType.WindowsSpeech));
 
         Assert.Equal(4, byEngine[EngineType.WhisperCpp].Count);         // tiny, base, small, large-v3-turbo
-        Assert.Equal(4, byEngine[EngineType.SherpaOnnxOffline].Count);  // sensevoice, moonshine-tiny, moonshine-base, omnilingual
+        Assert.Equal(5, byEngine[EngineType.SherpaOnnxOffline].Count);  // sensevoice, moonshine-tiny, moonshine-base, omnilingual, parakeet-tdt-v2
         Assert.Single(byEngine[EngineType.SherpaOnnxStreaming]);         // zipformer-20m
+        Assert.Single(byEngine[EngineType.QwenAsr]);                    // qwen3-asr-0.6b
+        Assert.Single(byEngine[EngineType.WindowsSpeech]);              // windows-speech
     }
 
     [Fact]
@@ -138,6 +149,39 @@ public class ModelInfoTests
     }
 
     [Fact]
+    public void ParakeetTdtV2_HasFourFiles()
+    {
+        var model = ModelInfo.AvailableModels.First(m => m.Id == "parakeet-tdt-v2");
+        Assert.Equal(4, model.Files.Count);
+        Assert.Equal(SherpaModelType.NemoTransducer, model.SherpaModelType);
+        Assert.Equal(EngineType.SherpaOnnxOffline, model.EngineType);
+        Assert.Contains(model.Files, f => f.LocalName == "tokens.txt");
+        Assert.Contains(model.Files, f => f.LocalName.Contains("encoder"));
+        Assert.Contains(model.Files, f => f.LocalName.Contains("decoder"));
+        Assert.Contains(model.Files, f => f.LocalName.Contains("joiner"));
+    }
+
+    [Fact]
+    public void Qwen3Asr_HasFiveFiles()
+    {
+        var model = ModelInfo.AvailableModels.First(m => m.Id == "qwen3-asr-0.6b");
+        Assert.Equal(5, model.Files.Count);
+        Assert.Equal(EngineType.QwenAsr, model.EngineType);
+        Assert.Null(model.SherpaModelType);
+        Assert.Contains(model.Files, f => f.LocalName == "model.safetensors");
+        Assert.Contains(model.Files, f => f.LocalName == "vocab.json");
+    }
+
+    [Fact]
+    public void WindowsSpeech_HasNoFiles()
+    {
+        var model = ModelInfo.AvailableModels.First(m => m.Id == "windows-speech");
+        Assert.Empty(model.Files);
+        Assert.Equal(EngineType.WindowsSpeech, model.EngineType);
+        Assert.Null(model.SherpaModelType);
+    }
+
+    [Fact]
     public void InferenceMethod_ReturnsCorrectStrings()
     {
         var whisper = ModelInfo.AvailableModels.First(m => m.EngineType == EngineType.WhisperCpp);
@@ -148,5 +192,11 @@ public class ModelInfoTests
 
         var sherpaStreaming = ModelInfo.AvailableModels.First(m => m.EngineType == EngineType.SherpaOnnxStreaming);
         Assert.Contains("sherpa-onnx streaming", sherpaStreaming.InferenceMethod);
+
+        var qwenAsr = ModelInfo.AvailableModels.First(m => m.EngineType == EngineType.QwenAsr);
+        Assert.Contains("qwen-asr", qwenAsr.InferenceMethod);
+
+        var windowsSpeech = ModelInfo.AvailableModels.First(m => m.EngineType == EngineType.WindowsSpeech);
+        Assert.Contains("Windows Speech API", windowsSpeech.InferenceMethod);
     }
 }

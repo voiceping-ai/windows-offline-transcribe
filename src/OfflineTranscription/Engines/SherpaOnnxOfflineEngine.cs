@@ -8,7 +8,7 @@ using OfflineTranscription.Models;
 namespace OfflineTranscription.Engines;
 
 /// <summary>
-/// sherpa-onnx offline engine via P/Invoke. Supports SenseVoice, Moonshine, and OmnilingualCtc models.
+/// sherpa-onnx offline engine via P/Invoke. Supports SenseVoice, Moonshine, OmnilingualCtc, and NemoTransducer models.
 /// Port of iOS SherpaOnnxOfflineEngine.swift.
 /// </summary>
 public sealed class SherpaOnnxOfflineEngine : IASREngine
@@ -114,7 +114,7 @@ public sealed class SherpaOnnxOfflineEngine : IASREngine
                     string? lang = null;
                     if (_modelType == SherpaModelType.SenseVoice)
                         lang = TryExtractSenseVoiceLanguage(ref text);
-                    else if (_modelType == SherpaModelType.Moonshine)
+                    else if (_modelType is SherpaModelType.Moonshine or SherpaModelType.NemoTransducer)
                         lang = "en";
                     // OmnilingualCtc: model outputs text directly, no language detection
 
@@ -242,6 +242,16 @@ public sealed class SherpaOnnxOfflineEngine : IASREngine
                 };
                 break;
 
+            case SherpaModelType.NemoTransducer:
+                modelConfig.Transducer = new SherpaOnnxOfflineTransducerModelConfig
+                {
+                    Encoder = pin(FindFile(modelDir, "encoder")),
+                    Decoder = pin(FindFile(modelDir, "decoder")),
+                    Joiner = pin(FindFile(modelDir, "joiner"))
+                };
+                modelConfig.ModelType = pin("nemo_transducer");
+                break;
+
             default:
                 throw new NotSupportedException($"Unsupported sherpa-onnx model type: {modelType}");
         }
@@ -262,11 +272,18 @@ public sealed class SherpaOnnxOfflineEngine : IASREngine
     {
         if (File.Exists(Path.Combine(modelDir, "preprocess.onnx")))
             return SherpaModelType.Moonshine;
+
+        // NemoTransducer: encoder+decoder+joiner without preprocess.onnx
+        if (Directory.GetFiles(modelDir, "encoder*onnx").Length > 0 &&
+            Directory.GetFiles(modelDir, "decoder*onnx").Length > 0 &&
+            Directory.GetFiles(modelDir, "joiner*onnx").Length > 0)
+            return SherpaModelType.NemoTransducer;
+
         if (Directory.Exists(modelDir) && Directory.GetFiles(modelDir, "model*onnx").Length > 0)
             return SherpaModelType.SenseVoice;
         throw new InvalidOperationException(
             $"Cannot detect sherpa-onnx model type in '{modelDir}': " +
-            "expected preprocess.onnx (Moonshine) or model*.onnx (SenseVoice)");
+            "expected preprocess.onnx (Moonshine), encoder/decoder/joiner (NemoTransducer), or model*.onnx (SenseVoice)");
     }
 
     internal static string FindFile(string dir, string prefix)

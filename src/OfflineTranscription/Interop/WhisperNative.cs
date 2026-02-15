@@ -183,18 +183,19 @@ internal struct WhisperFullParams
     public IntPtr logits_filter_callback_user_data;
 
     public IntPtr grammar_rules;
-    public int n_grammar_rules;
-    public int i_start_rule;
+    public IntPtr n_grammar_rules;  // size_t
+    public IntPtr i_start_rule;     // size_t
     public float grammar_penalty;
 
     // VAD fields (added in v1.8.x)
     [MarshalAs(UnmanagedType.I1)]
     public bool vad;
     public IntPtr vad_model_path;
-    // whisper_vad_params inlined (threshold float, min_speech_duration_ms int, etc.)
+    // whisper_vad_params inlined — matches struct whisper_vad_params exactly
     public float vad_threshold;
     public int vad_min_speech_duration_ms;
-    public int vad_max_speech_duration_ms;
+    public int vad_min_silence_duration_ms;
+    public float vad_max_speech_duration_s;
     public int vad_speech_pad_ms;
-    public float vad_min_silence_duration_ms;
+    public float vad_samples_overlap;
 }

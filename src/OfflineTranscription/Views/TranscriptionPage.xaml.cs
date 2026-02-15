@@ -75,6 +75,16 @@ public sealed partial class TranscriptionPage : Page
                 await dialog.ShowAsync();
             }
         }
+
+        // Auto-transcribe test audio if trigger file or --test-audio argument is present
+        var triggerFile = Path.Combine(AppContext.BaseDirectory, "test-audio.trigger");
+        var args = Environment.GetCommandLineArgs();
+        bool shouldTest = File.Exists(triggerFile) || args.Any(a => a == "--test-audio");
+        if (shouldTest && VM.Service.ModelState == ASRModelState.Loaded)
+        {
+            try { File.Delete(triggerFile); } catch { }
+            await VM.TranscribeTestAudioCommand.ExecuteAsync(null);
+        }
     }
 
     private void RecordButton_Click(object sender, RoutedEventArgs e)

@@ -80,74 +80,63 @@ public sealed class WhisperCppEngine : IASREngine
                 wparams.print_special = false;
                 wparams.print_realtime = false;
                 wparams.print_timestamps = false;
-                wparams.no_timestamps = false;
-                wparams.single_segment = false;
-                wparams.translate = false;
-                wparams.suppress_blank = true;
 
-                // Language handling: whisper.cpp treats language detection as a separate flag.
-                // If caller asks for "auto", enable detect_language and pass a safe default.
-                bool detectLanguage = string.IsNullOrWhiteSpace(language) ||
-                                      language.Equals("auto", StringComparison.OrdinalIgnoreCase);
-                wparams.detect_language = detectLanguage;
+                var logPath = Path.Combine(AppContext.BaseDirectory, "whisper-debug.log");
+                void Log(string msg) { try { File.AppendAllText(logPath, msg + "\n"); } catch { } Debug.WriteLine(msg); }
 
-                var langToPass = detectLanguage ? "en" : language;
-                var langPtr = Marshal.StringToCoTaskMemUTF8(langToPass);
-                wparams.language = langPtr;
+                Log($"[WhisperCpp] Transcribing {audioSamples.Length} samples ({audioSamples.Length / 16000.0:F1}s) with {numThreads} threads, lang={language}");
+                Log($"[WhisperCpp] WhisperFullParams size: {Marshal.SizeOf<WhisperFullParams>()} bytes");
+                // Check audio samples are not all zeros
+                float maxAbs = 0;
+                for (int s = 0; s < Math.Min(audioSamples.Length, 16000); s++)
+                    if (Math.Abs(audioSamples[s]) > maxAbs) maxAbs = Math.Abs(audioSamples[s]);
+                Log($"[WhisperCpp] First 1s max amplitude: {maxAbs:F6}");
 
+                int ret = WhisperNative.Full(ctx, wparams, audioSamples, audioSamples.Length);
+                Log($"[WhisperCpp] whisper_full returned {ret}");
+
+                if (ret != 0)
+                    return ASRResult.Empty;
+
+                // Read detected language from the native API
+                string? detectedLang = null;
                 try
                 {
-                    int ret = WhisperNative.Full(ctx, wparams, audioSamples, audioSamples.Length);
-                    if (ret != 0)
-                    {
-                        Debug.WriteLine($"[WhisperCpp] whisper_full returned {ret}");
-                        return ASRResult.Empty;
-                    }
-
-                    // Read detected language from the native API
-                    string? detectedLang = null;
-                    if (detectLanguage)
-                    {
-                        try
-                        {
-                            int langId = WhisperNative.FullLangId(ctx);
-                            if (langId >= 0)
-                            {
-                                var langStrPtr = WhisperNative.LangStr(langId);
-                                detectedLang = Marshal.PtrToStringUTF8(langStrPtr);
-                            }
-                        }
-                        catch { /* best-effort language detection */ }
-                    }
-                    else
-                    {
-                        detectedLang = language;
-                    }
-
-                    int nSegments = WhisperNative.FullNSegments(ctx);
-                    var segments = new List<ASRSegment>(nSegments);
-                    var fullText = new System.Text.StringBuilder();
-
-                    for (int i = 0; i < nSegments; i++)
-                    {
-                        var textPtr = WhisperNative.FullGetSegmentText(ctx, i);
-                        var text = Marshal.PtrToStringUTF8(textPtr) ?? "";
-                        var t0 = WhisperNative.FullGetSegmentT0(ctx, i) * 10; // centiseconds → ms
-                        var t1 = WhisperNative.FullGetSegmentT1(ctx, i) * 10;
-
-                        segments.Add(new ASRSegment(text.Trim(), t0, t1));
-                        fullText.Append(text);
-                    }
-
-                    return new ASRResult(
-                        fullText.ToString().Trim(),
-                        segments,
-                        DetectedLanguage: detectedLang);
+                    int langId = WhisperNative.FullLangId(ctx);
+                    var langStrPtr = WhisperNative.LangStr(langId);
+                    detectedLang = Marshal.PtrToStringUTF8(langStrPtr);
+                    Log($"[WhisperCpp] Detected language: {detectedLang} (id={langId})");
                 }
-                finally
+                catch (Exception ex)
                 {
-                    Marshal.FreeCoTaskMem(langPtr);
+                    Log($"[WhisperCpp] Language detection error: {ex.Message}");
                 }
+
+                int nSegments = WhisperNative.FullNSegments(ctx);
+                Log($"[WhisperCpp] nSegments={nSegments}");
+
+                var segments = new List<ASRSegment>(nSegments);
+                var fullText = new System.Text.StringBuilder();
+
+                for (int i = 0; i < nSegments; i++)
+                {
+                    var textPtr = WhisperNative.FullGetSegmentText(ctx, i);
+                    var text = Marshal.PtrToStringUTF8(textPtr) ?? "";
+                    var t0 = WhisperNative.FullGetSegmentT0(ctx, i) * 10; // centiseconds → ms
+                    var t1 = WhisperNative.FullGetSegmentT1(ctx, i) * 10;
+
+                    Log($"[WhisperCpp] Segment {i}: [{t0}-{t1}ms] '{text}'");
+                    segments.Add(new ASRSegment(text.Trim(), t0, t1));
+                    fullText.Append(text);
+                }
+
+                var finalText = fullText.ToString().Trim();
+                Log($"[WhisperCpp] Final text: '{finalText}'");
+
+                return new ASRResult(
+                    finalText,
+                    segments,
+                    DetectedLanguage: detectedLang);
             }, ct);
 
             sw.Stop();

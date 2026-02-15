@@ -131,6 +131,50 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Transcribe the embedded test audio file (test-english-30s.wav) placed alongside the exe.
+    /// Used for automated E2E testing without microphone input.
+    /// </summary>
+    [RelayCommand]
+    public async Task TranscribeTestAudioAsync()
+    {
+        if (_service.ModelState != ASRModelState.Loaded) return;
+
+        try
+        {
+            var basePath = AppContext.BaseDirectory;
+            var testAudioPath = Path.Combine(basePath, "test-english-30s.wav");
+            if (!File.Exists(testAudioPath))
+            {
+                App.Evidence.LogEvent("test_audio_not_found", new { path = testAudioPath }, level: "error");
+                return;
+            }
+
+            App.Evidence.LogEvent("test_audio_transcribe_start", new { path = testAudioPath });
+
+            var samples = await ReadAudioFileAsync(testAudioPath);
+            if (samples == null || samples.Length == 0)
+            {
+                App.Evidence.LogEvent("test_audio_decode_failed", new { path = testAudioPath }, level: "error");
+                return;
+            }
+
+            var result = await _service.TranscribeFileAsync(samples);
+
+            App.Evidence.LogEvent("test_audio_transcribe_done", new
+            {
+                text = result.Text,
+                detectedLanguage = result.DetectedLanguage,
+                inferenceTimeMs = result.InferenceTimeMs
+            });
+            _ = App.Evidence.CaptureScreenshotAsync("test_audio_transcribe_done");
+        }
+        catch (Exception ex)
+        {
+            App.Evidence.LogEvent("test_audio_exception", new { error = ex.ToString() }, level: "error");
+        }
+    }
+
     [RelayCommand]
     private void CopyText()
     {

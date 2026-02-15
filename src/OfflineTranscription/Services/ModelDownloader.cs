@@ -51,6 +51,96 @@ public sealed class ModelDownloader
     }
 
     /// <summary>
+    /// Try to delete a file, retrying briefly if it is locked by another process.
+    /// </summary>
+    private static void TryDeleteFile(string path)
+    {
+        if (!File.Exists(path)) return;
+        for (int attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                File.Delete(path);
+                return;
+            }
+            catch (IOException) when (attempt < 4)
+            {
+                Thread.Sleep(500);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Try to move/rename a file, retrying with delays to handle transient locks
+    /// (e.g. Windows Defender scanning the file after write).
+    /// </summary>
+    private static void TryMoveFile(string source, string dest)
+    {
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            try
+            {
+                File.Move(source, dest, overwrite: true);
+                return;
+            }
+            catch (IOException) when (attempt < 9)
+            {
+                Debug.WriteLine($"[ModelDownloader] File.Move attempt {attempt + 1} failed, retrying...");
+                Thread.Sleep(1000);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Download a single file from url to targetPath via a .tmp intermediate,
+    /// starting fresh (no resume).
+    /// </summary>
+    private static async Task DownloadFileFreshAsync(
+        string url, string targetPath, string tempPath,
+        int fileIndex, int totalFiles,
+        IProgress<double>? progress, CancellationToken ct)
+    {
+        TryDeleteFile(tempPath);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        response.EnsureSuccessStatusCode();
+
+        var totalBytes = response.Content.Headers.ContentLength ?? 0;
+        long bytesWritten = 0;
+
+        await using (var contentStream = await response.Content.ReadAsStreamAsync(ct))
+        await using (var fileStream = new FileStream(tempPath, FileMode.Create,
+            FileAccess.Write, FileShare.Read, 81920, true))
+        {
+            var buffer = new byte[81920];
+            int bytesRead;
+
+            while ((bytesRead = await contentStream.ReadAsync(buffer, ct)) > 0)
+            {
+                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
+                bytesWritten += bytesRead;
+
+                if (totalBytes > 0)
+                    progress?.Report((fileIndex + (double)bytesWritten / totalBytes) / totalFiles);
+            }
+
+            await fileStream.FlushAsync(ct);
+        }
+        // FileStream is now fully disposed
+
+        if (totalBytes > 0 && bytesWritten != totalBytes)
+        {
+            TryDeleteFile(tempPath);
+            throw new IOException(
+                $"Download incomplete for {Path.GetFileName(targetPath)}: expected {totalBytes} bytes, got {bytesWritten}");
+        }
+
+        TryMoveFile(tempPath, targetPath);
+        progress?.Report((fileIndex + 1.0) / totalFiles);
+    }
+
+    /// <summary>
     /// Download all files for a model with progress reporting.
     /// Supports resume via HTTP Range headers.
     /// </summary>
@@ -79,69 +169,95 @@ public sealed class ModelDownloader
 
             long existingBytes = 0;
             if (File.Exists(tempPath))
-                existingBytes = new FileInfo(tempPath).Length;
+            {
+                try { existingBytes = new FileInfo(tempPath).Length; }
+                catch (IOException) { existingBytes = 0; }
+            }
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, file.Url);
-
-            // Resume support
+            // If we have partial data, try to resume
             if (existingBytes > 0)
             {
+                using var request = new HttpRequestMessage(HttpMethod.Get, file.Url);
                 request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existingBytes, null);
                 Debug.WriteLine($"[ModelDownloader] Resuming {file.LocalName} from byte {existingBytes}");
-            }
 
-            using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-
-            // If server doesn't support Range, start fresh
-            if (existingBytes > 0 && response.StatusCode != System.Net.HttpStatusCode.PartialContent)
-            {
-                existingBytes = 0;
-                if (File.Exists(tempPath)) File.Delete(tempPath);
-            }
-
-            response.EnsureSuccessStatusCode();
-
-            var totalBytes = response.Content.Headers.ContentLength ?? 0;
-            if (existingBytes > 0 && response.StatusCode == System.Net.HttpStatusCode.PartialContent)
-                totalBytes += existingBytes;
-
-            await using var contentStream = await response.Content.ReadAsStreamAsync(ct);
-            await using var fileStream = new FileStream(tempPath,
-                existingBytes > 0 ? FileMode.Append : FileMode.Create,
-                FileAccess.Write, FileShare.None, 81920, true);
-
-            var buffer = new byte[81920];
-            long bytesWritten = existingBytes;
-            int bytesRead;
-
-            while ((bytesRead = await contentStream.ReadAsync(buffer, ct)) > 0)
-            {
-                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
-                bytesWritten += bytesRead;
-
-                if (totalBytes > 0)
+                HttpResponseMessage response;
+                try
                 {
-                    double fileProgress = (double)bytesWritten / totalBytes;
-                    double overallProgress = (i + fileProgress) / totalFiles;
-                    progress?.Report(overallProgress);
+                    response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
                 }
+                catch
+                {
+                    // Network error during resume; fall through to fresh download
+                    await DownloadFileFreshAsync(file.Url, targetPath, tempPath, i, totalFiles, progress, ct);
+                    continue;
+                }
+
+                using (response)
+                {
+                    if (response.StatusCode == System.Net.HttpStatusCode.PartialContent)
+                    {
+                        // Resume succeeded
+                        var totalBytes = (response.Content.Headers.ContentLength ?? 0) + existingBytes;
+                        await using var contentStream = await response.Content.ReadAsStreamAsync(ct);
+
+                        long bytesWritten = existingBytes;
+
+                        FileStream fileStream;
+                        try
+                        {
+                            fileStream = new FileStream(tempPath, FileMode.Append,
+                                FileAccess.Write, FileShare.Read, 81920, true);
+                        }
+                        catch (IOException)
+                        {
+                            // File locked; start fresh
+                            await DownloadFileFreshAsync(file.Url, targetPath, tempPath, i, totalFiles, progress, ct);
+                            continue;
+                        }
+
+                        await using (fileStream)
+                        {
+                            var buffer = new byte[81920];
+                            int bytesRead;
+
+                            while ((bytesRead = await contentStream.ReadAsync(buffer, ct)) > 0)
+                            {
+                                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
+                                bytesWritten += bytesRead;
+                                if (totalBytes > 0)
+                                    progress?.Report((i + (double)bytesWritten / totalBytes) / totalFiles);
+                            }
+
+                            await fileStream.FlushAsync(ct);
+                        }
+                        // FileStream is now fully disposed
+
+                        if (totalBytes > 0 && bytesWritten != totalBytes)
+                        {
+                            TryDeleteFile(tempPath);
+                            throw new IOException(
+                                $"Download incomplete for {file.LocalName}: expected {totalBytes} bytes, got {bytesWritten}");
+                        }
+
+                        TryMoveFile(tempPath, targetPath);
+                        Debug.WriteLine($"[ModelDownloader] Resumed {file.LocalName}");
+                        progress?.Report((i + 1.0) / totalFiles);
+                        continue;
+                    }
+
+                    // Server returned 200 OK, 416, or other non-206: download fresh
+                }
+
+                await DownloadFileFreshAsync(file.Url, targetPath, tempPath, i, totalFiles, progress, ct);
             }
-
-            await fileStream.FlushAsync(ct);
-
-            // Size verification before rename (Android M2 fix)
-            if (totalBytes > 0 && bytesWritten != totalBytes)
+            else
             {
-                File.Delete(tempPath);
-                throw new IOException(
-                    $"Download incomplete for {file.LocalName}: expected {totalBytes} bytes, got {bytesWritten}");
+                // No partial data, download from scratch
+                await DownloadFileFreshAsync(file.Url, targetPath, tempPath, i, totalFiles, progress, ct);
             }
 
-            // Atomic temp → final rename
-            File.Move(tempPath, targetPath, overwrite: true);
-            Debug.WriteLine($"[ModelDownloader] Downloaded {file.LocalName} ({bytesWritten:N0} bytes)");
-
-            progress?.Report((i + 1.0) / totalFiles);
+            Debug.WriteLine($"[ModelDownloader] Downloaded {file.LocalName}");
         }
     }
 

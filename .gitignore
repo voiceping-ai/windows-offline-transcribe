@@ -33,7 +33,19 @@ coverage-*/
 .DS_Store
 Thumbs.db
 
+# Native libs / DLLs
+libs/
+
+# Test audio files
+*.wav
+
 # Local generated artifacts
 artifacts/
 screen_*.png
 screen_*.ppm
+
+# SSH / keys / secrets
+*.pem
+*.key
+id_rsa*
+id_ed25519*

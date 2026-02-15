@@ -47,17 +47,32 @@ public partial class App : Application
         _ = Evidence.CaptureScreenshotAsync("app_launch");
     }
 
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int AddDllDirectory(string newDirectory);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetDefaultDllDirectories(uint directoryFlags);
+
     /// <summary>
     /// Configure DLL import resolver for native libraries (whisper.dll, sherpa-onnx).
     /// Native DLLs are placed alongside the exe in the output directory.
     /// </summary>
     private static void SetupNativeLibraryResolvers()
     {
+        var basePath = AppContext.BaseDirectory;
+
+        // Pre-load ggml dependency DLLs so the Windows loader can find them
+        // when whisper.dll is loaded (whisper.dll imports ggml.dll and ggml-base.dll).
+        foreach (var dep in new[] { "ggml-base", "ggml-cpu", "ggml" })
+        {
+            var depPath = Path.Combine(basePath, $"{dep}.dll");
+            if (File.Exists(depPath))
+                NativeLibrary.Load(depPath);
+        }
+
         NativeLibrary.SetDllImportResolver(typeof(WhisperNative).Assembly, (name, assembly, searchPath) =>
         {
-            // Try loading from app base directory first
-            var basePath = AppContext.BaseDirectory;
-
             // Check runtimes/win-x64/ subfolder
             var runtimePath = Path.Combine(basePath, "runtimes", "win-x64", $"{name}.dll");
             if (File.Exists(runtimePath))

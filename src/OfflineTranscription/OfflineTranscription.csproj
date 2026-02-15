@@ -40,4 +40,12 @@
       <Link>%(Filename)%(Extension)</Link>
     </Content>
   </ItemGroup>
+
+  <!-- Test audio file for E2E testing -->
+  <ItemGroup>
+    <Content Include="..\..\test-english-30s.wav" Condition="Exists('..\..\test-english-30s.wav')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>test-english-30s.wav</Link>
+    </Content>
+  </ItemGroup>
 </Project>

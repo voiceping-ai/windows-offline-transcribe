@@ -210,7 +210,7 @@ public sealed class SherpaOnnxOfflineEngine : IASREngine
 
         int threads = ComputeThreads();
         modelConfig.NumThreads = threads;
-        modelConfig.Debug = false;
+        modelConfig.Debug = 0;
         modelConfig.Provider = pin(provider);
         modelConfig.Tokens = pin(Path.Combine(modelDir, "tokens.txt"));
 
@@ -221,7 +221,7 @@ public sealed class SherpaOnnxOfflineEngine : IASREngine
                 {
                     Model = pin(FindFile(modelDir, "model")),
                     Language = pin("auto"),
-                    UseInverseTextNormalization = true
+                    UseItn = 1
                 };
                 break;
 
@@ -236,7 +236,7 @@ public sealed class SherpaOnnxOfflineEngine : IASREngine
                 break;
 
             case SherpaModelType.OmnilingualCtc:
-                modelConfig.NemoCtc = new SherpaOnnxOfflineNemoEncDecCtcModelConfig
+                modelConfig.Omnilingual = new SherpaOnnxOfflineOmnilingualAsrCtcModelConfig
                 {
                     Model = pin(FindFile(modelDir, "model"))
                 };
@@ -246,6 +246,9 @@ public sealed class SherpaOnnxOfflineEngine : IASREngine
                 throw new NotSupportedException($"Unsupported sherpa-onnx model type: {modelType}");
         }
 
+        // Omnilingual CTC model handles its own preprocessing; skip explicit FeatConfig.
+        if (modelType != SherpaModelType.OmnilingualCtc)
+            config.FeatConfig = new SherpaOnnxFeatureConfig { SampleRate = 16000, FeatureDim = 80 };
         config.ModelConfig = modelConfig;
         config.DecodingMethod = pin("greedy_search");
         config.MaxActivePaths = 4;

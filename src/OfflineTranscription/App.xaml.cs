@@ -68,7 +68,13 @@ public partial class App : Application
         {
             var depPath = Path.Combine(basePath, $"{dep}.dll");
             if (File.Exists(depPath))
-                NativeLibrary.Load(depPath);
+            {
+                try { NativeLibrary.Load(depPath); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Failed to pre-load {dep}.dll: {ex.Message}");
+                }
+            }
         }
 
         NativeLibrary.SetDllImportResolver(typeof(WhisperNative).Assembly, (name, assembly, searchPath) =>

@@ -6,6 +6,7 @@ namespace OfflineTranscription.Interop;
 /// P/Invoke declarations for sherpa-onnx C API.
 /// sherpa-onnx.dll from GitHub releases bundles ONNX Runtime + DirectML.
 /// Reference: https://github.com/k2-fsa/sherpa-onnx/blob/master/sherpa-onnx/c-api/c-api.h
+/// IMPORTANT: Struct layouts must exactly match the native C API header.
 /// </summary>
 internal static class SherpaOnnxNative
 {
@@ -107,39 +108,15 @@ internal static class SherpaOnnxNative
     }
 }
 
-// ── Config structs matching sherpa-onnx C API ──
+// ══════════════════════════════════════════════════════════════════════════════
+// Offline config structs — must match sherpa-onnx c-api.h exactly
+// ══════════════════════════════════════════════════════════════════════════════
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct SherpaOnnxOfflineRecognizerConfig
+internal struct SherpaOnnxFeatureConfig
 {
-    public SherpaOnnxOfflineModelConfig ModelConfig;
-    public IntPtr DecodingMethod; // "greedy_search" or "modified_beam_search"
-    public int MaxActivePaths;
-    public IntPtr HotwordsFile;
-    public float HotwordsScore;
-    public IntPtr RuleFsts;
-    public IntPtr RuleFars;
-}
-
-[StructLayout(LayoutKind.Sequential)]
-internal struct SherpaOnnxOfflineModelConfig
-{
-    public SherpaOnnxOfflineTransducerModelConfig Transducer;
-    public SherpaOnnxOfflineParaformerModelConfig Paraformer;
-    public SherpaOnnxOfflineNemoEncDecCtcModelConfig NemoCtc;
-    public SherpaOnnxOfflineWhisperModelConfig Whisper;
-    public SherpaOnnxOfflineTdnnModelConfig Tdnn;
-    public IntPtr Tokens;
-    public int NumThreads;
-    [MarshalAs(UnmanagedType.I1)]
-    public bool Debug;
-    public IntPtr Provider; // "cpu", "directml", "cuda"
-    public IntPtr ModelType;
-    public IntPtr ModelingUnit;
-    public IntPtr BpeVocab;
-    public IntPtr TeleSpeechCtc;
-    public SherpaOnnxOfflineSenseVoiceModelConfig SenseVoice;
-    public SherpaOnnxOfflineMoonshineModelConfig Moonshine;
+    public int SampleRate;
+    public int FeatureDim;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -170,6 +147,8 @@ internal struct SherpaOnnxOfflineWhisperModelConfig
     public IntPtr Language;
     public IntPtr Task;
     public int TailPaddings;
+    public int EnableTokenTimestamps;
+    public int EnableSegmentTimestamps;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -183,8 +162,7 @@ internal struct SherpaOnnxOfflineSenseVoiceModelConfig
 {
     public IntPtr Model;
     public IntPtr Language;
-    [MarshalAs(UnmanagedType.I1)]
-    public bool UseInverseTextNormalization;
+    public int UseItn; // int32_t, NOT bool
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -196,7 +174,133 @@ internal struct SherpaOnnxOfflineMoonshineModelConfig
     public IntPtr CachedDecoder;
 }
 
-// ── Online (Streaming) config structs matching sherpa-onnx C API ──
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOfflineFireRedAsrModelConfig
+{
+    public IntPtr Encoder;
+    public IntPtr Decoder;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOfflineDolphinModelConfig
+{
+    public IntPtr Model;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOfflineZipformerCtcModelConfig
+{
+    public IntPtr Model;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOfflineCanaryModelConfig
+{
+    public IntPtr Encoder;
+    public IntPtr Decoder;
+    public IntPtr SrcLang;
+    public IntPtr TgtLang;
+    public int UsePnc;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOfflineWenetCtcModelConfig
+{
+    public IntPtr Model;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOfflineOmnilingualAsrCtcModelConfig
+{
+    public IntPtr Model;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOfflineMedAsrCtcModelConfig
+{
+    public IntPtr Model;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOfflineFunASRNanoModelConfig
+{
+    public IntPtr EncoderAdaptor;
+    public IntPtr Llm;
+    public IntPtr Embedding;
+    public IntPtr Tokenizer;
+    public IntPtr SystemPrompt;
+    public IntPtr UserPrompt;
+    public int MaxNewTokens;
+    public float Temperature;
+    public float TopP;
+    public int Seed;
+    public IntPtr Language;
+    public int Itn;
+    public IntPtr Hotwords;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOfflineModelConfig
+{
+    public SherpaOnnxOfflineTransducerModelConfig Transducer;
+    public SherpaOnnxOfflineParaformerModelConfig Paraformer;
+    public SherpaOnnxOfflineNemoEncDecCtcModelConfig NemoCtc;
+    public SherpaOnnxOfflineWhisperModelConfig Whisper;
+    public SherpaOnnxOfflineTdnnModelConfig Tdnn;
+    public IntPtr Tokens;
+    public int NumThreads;
+    public int Debug; // int32_t, NOT bool
+    public IntPtr Provider; // "cpu", "directml", "cuda"
+    public IntPtr ModelType;
+    public IntPtr ModelingUnit;
+    public IntPtr BpeVocab;
+    public IntPtr TeleSpeechCtc;
+    public SherpaOnnxOfflineSenseVoiceModelConfig SenseVoice;
+    public SherpaOnnxOfflineMoonshineModelConfig Moonshine;
+    public SherpaOnnxOfflineFireRedAsrModelConfig FireRedAsr;
+    public SherpaOnnxOfflineDolphinModelConfig Dolphin;
+    public SherpaOnnxOfflineZipformerCtcModelConfig ZipformerCtc;
+    public SherpaOnnxOfflineCanaryModelConfig Canary;
+    public SherpaOnnxOfflineWenetCtcModelConfig WenetCtc;
+    public SherpaOnnxOfflineOmnilingualAsrCtcModelConfig Omnilingual;
+    public SherpaOnnxOfflineMedAsrCtcModelConfig MedAsr;
+    public SherpaOnnxOfflineFunASRNanoModelConfig FunasrNano;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOfflineLMConfig
+{
+    public IntPtr Model;
+    public float Scale;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxHomophoneReplacerConfig
+{
+    public IntPtr DictDir;
+    public IntPtr Lexicon;
+    public IntPtr RuleFsts;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SherpaOnnxOfflineRecognizerConfig
+{
+    public SherpaOnnxFeatureConfig FeatConfig;
+    public SherpaOnnxOfflineModelConfig ModelConfig;
+    public SherpaOnnxOfflineLMConfig LmConfig;
+    public IntPtr DecodingMethod; // "greedy_search" or "modified_beam_search"
+    public int MaxActivePaths;
+    public IntPtr HotwordsFile;
+    public float HotwordsScore;
+    public IntPtr RuleFsts;
+    public IntPtr RuleFars;
+    public float BlankPenalty;
+    public SherpaOnnxHomophoneReplacerConfig Hr;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Online (Streaming) config structs — must match sherpa-onnx c-api.h exactly
+// ══════════════════════════════════════════════════════════════════════════════
 
 [StructLayout(LayoutKind.Sequential)]
 internal struct SherpaOnnxOnlineTransducerModelConfig
@@ -251,25 +355,10 @@ internal struct SherpaOnnxOnlineModelConfig
 }
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct SherpaOnnxFeatureConfig
-{
-    public int SampleRate;
-    public int FeatureDim;
-}
-
-[StructLayout(LayoutKind.Sequential)]
 internal struct SherpaOnnxOnlineCtcFstDecoderConfig
 {
     public IntPtr Graph;
     public int MaxActive;
-}
-
-[StructLayout(LayoutKind.Sequential)]
-internal struct SherpaOnnxHomophoneReplacerConfig
-{
-    public IntPtr DictDir;
-    public IntPtr Lexicon;
-    public IntPtr RuleFsts;
 }
 
 [StructLayout(LayoutKind.Sequential)]

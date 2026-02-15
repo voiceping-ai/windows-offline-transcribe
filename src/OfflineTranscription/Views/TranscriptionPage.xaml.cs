@@ -79,6 +79,19 @@ public sealed partial class TranscriptionPage : Page
                     XamlRoot = this.XamlRoot
                 };
                 await dialog.ShowAsync();
+
+                // Navigate to model setup so the user can pick a working model.
+                Frame.Navigate(typeof(ModelSetupPage));
+                return;
+            }
+
+            // If LoadSavedModelAsync returned without error but the model
+            // still isn't loaded (e.g. model id was null or files missing),
+            // redirect to setup as well.
+            if (VM.Service.ModelState != ASRModelState.Loaded)
+            {
+                Frame.Navigate(typeof(ModelSetupPage));
+                return;
             }
         }
 

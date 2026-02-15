@@ -25,6 +25,9 @@ public sealed partial class TranscriptionPage : Page
         VM.Service.ModelState == ASRModelState.Downloading
             ? Visibility.Visible : Visibility.Collapsed;
 
+    public Visibility ShowTranslationSection =>
+        VM.Service.Mode == AppMode.Translate ? Visibility.Visible : Visibility.Collapsed;
+
     public string StatsText
     {
         get
@@ -135,6 +138,7 @@ public sealed partial class TranscriptionPage : Page
             case nameof(TranscriptionService.MemoryMB):
             case nameof(TranscriptionService.ModelState):
             case nameof(TranscriptionService.SessionState):
+            case nameof(TranscriptionService.Mode):
                 DispatcherQueue.TryEnqueue(() => Bindings.Update());
                 break;
         }

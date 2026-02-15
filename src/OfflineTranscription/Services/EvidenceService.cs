@@ -156,6 +156,33 @@ public sealed class EvidenceService
             var models = ModelEvidence.CaptureAll(ModelInfo.AvailableModels);
             s.WriteJson("models/installed_models.json", models);
 
+            // Translation models evidence (downloaded / extracted)
+            var translationModels = TranslationModelInfo.AvailableModels
+                .Select(m => new
+                {
+                    id = m.Id,
+                    displayName = m.DisplayName,
+                    source = m.SourceLanguageCode,
+                    target = m.TargetLanguageCode,
+                    sizeOnDisk = m.SizeOnDisk,
+                    downloaded = TranslationModelDownloader.IsModelDownloaded(m),
+                    modelDir = TranslationModelDownloader.GetModelDir(m),
+                    extractedDir = TranslationModelDownloader.GetExtractedDir(m)
+                })
+                .ToArray();
+            s.WriteJson("models/translation_models.json", new
+            {
+                baseDir = TranslationModelDownloader.TranslationModelsBaseDir,
+                models = translationModels
+            });
+
+            // TTS evidence dir inventory (best-effort)
+            var ttsEvidenceDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "OfflineTranscription",
+                "TtsEvidence");
+            s.WriteJson("tts/evidence_dir.json", GetDirectoryInventory(ttsEvidenceDir, "*.wav"));
+
             // Native DLL inventory (best-effort)
             s.WriteJson("native/dll_inventory.json", new
             {

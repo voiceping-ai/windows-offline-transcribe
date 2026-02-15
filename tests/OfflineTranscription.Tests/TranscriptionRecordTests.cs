@@ -81,18 +81,28 @@ public class TranscriptionRecordTests
         {
             Id = "custom-id",
             Text = "Test text",
+            TranslatedText = "Translated text",
             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             DurationSeconds = 42.5,
             ModelUsed = "whisper-base",
             Language = "en",
-            AudioFileName = "Sessions/abc/audio.wav"
+            TranslationSourceLanguage = "en",
+            TranslationTargetLanguage = "ja",
+            TranslationModelId = "ct2-opus-mt-en-ja-int8",
+            AudioFileName = "Sessions/abc/audio.wav",
+            TtsEvidenceFileName = "Sessions/abc/tts.wav"
         };
 
         Assert.Equal("custom-id", record.Id);
         Assert.Equal("Test text", record.Text);
+        Assert.Equal("Translated text", record.TranslatedText);
         Assert.Equal(42.5, record.DurationSeconds);
         Assert.Equal("whisper-base", record.ModelUsed);
         Assert.Equal("en", record.Language);
+        Assert.Equal("en", record.TranslationSourceLanguage);
+        Assert.Equal("ja", record.TranslationTargetLanguage);
+        Assert.Equal("ct2-opus-mt-en-ja-int8", record.TranslationModelId);
         Assert.Equal("Sessions/abc/audio.wav", record.AudioFileName);
+        Assert.Equal("Sessions/abc/tts.wav", record.TtsEvidenceFileName);
     }
 }

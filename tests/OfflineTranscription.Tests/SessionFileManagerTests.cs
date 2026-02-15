@@ -84,4 +84,28 @@ public class SessionFileManagerTests
             SessionFileManager.DeleteSession("nonexistent-session-id"));
         Assert.Null(ex);
     }
+
+    [Fact]
+    public void SaveTtsEvidence_CopiesFileIntoSessionAndReturnsRelativePath()
+    {
+        var sessionId = $"tts-test-{Guid.NewGuid():N}";
+        var sourceDir = Path.Combine(Path.GetTempPath(), $"tts_src_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(sourceDir);
+        var sourcePath = Path.Combine(sourceDir, "source.wav");
+        File.WriteAllBytes(sourcePath, new byte[] { 1, 2, 3, 4 });
+
+        try
+        {
+            var rel = SessionFileManager.SaveTtsEvidence(sessionId, sourcePath);
+            Assert.Equal($"Sessions/{sessionId}/tts.wav", rel);
+
+            var abs = SessionFileManager.GetAbsolutePath(rel);
+            Assert.True(File.Exists(abs));
+        }
+        finally
+        {
+            try { SessionFileManager.DeleteSession(sessionId); } catch { /* best-effort */ }
+            try { Directory.Delete(sourceDir, recursive: true); } catch { /* best-effort */ }
+        }
+    }
 }

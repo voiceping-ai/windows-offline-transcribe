@@ -11,6 +11,7 @@ namespace OfflineTranscription.Services;
 /// <summary>
 /// Orchestrates the full transcription workflow: model lifecycle, recording,
 /// real-time transcription loop, VAD, chunk windowing, and metrics.
+/// Also supports an optional offline translation + TTS pipeline (mode-gated).
 /// Port of iOS WhisperService.swift + Android WhisperEngine.kt.
 /// </summary>
 public sealed partial class TranscriptionService : ObservableObject, IDisposable
@@ -37,12 +38,47 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
     [ObservableProperty] private double _cpuPercent;
     [ObservableProperty] private double _memoryMB;
 
+    // ── Mode ──
+    private AppMode _mode = AppMode.Transcribe;
+    public AppMode Mode
+    {
+        get => _mode;
+        private set => SetProperty(ref _mode, value);
+    }
+
+    // ── Translation / TTS state ──
+    private readonly ITranslationEngine _translationEngine = new CTranslate2TranslationEngine();
+    private readonly ITtsService _ttsService = new WindowsMediaTtsService();
+
+    [ObservableProperty] private string _translationSourceLanguageCode = "en";
+    [ObservableProperty] private string _translationTargetLanguageCode = "ja";
+    [ObservableProperty] private bool _translationModelReady;
+    [ObservableProperty] private double _translationDownloadProgress;
+    [ObservableProperty] private string? _translationDownloadStatus;
+    [ObservableProperty] private string _translatedConfirmedText = "";
+    [ObservableProperty] private string _translatedHypothesisText = "";
+    [ObservableProperty] private string? _translationWarning;
+
+    [ObservableProperty] private bool _speakTranslatedAudio;
+    [ObservableProperty] private double _ttsRate = 1.0;
+    [ObservableProperty] private string? _ttsVoiceId;
+    [ObservableProperty] private bool _isSpeakingTts;
+    [ObservableProperty] private string? _ttsEvidenceWavPath;
+    [ObservableProperty] private int _ttsStartCount;
+    [ObservableProperty] private int _ttsMicGuardViolations;
+    [ObservableProperty] private bool _micStoppedForTts;
+    [ObservableProperty] private string? _detectedLanguage;
+
+    private CancellationTokenSource? _translationCts;
+    private CancellationTokenSource? _resumeAfterTtsCts;
+    private (string confirmed, string hypothesis, string src, string tgt)? _lastTranslationInput;
+    private string _lastSpokenTranslatedConfirmed = "";
+
     // ── Transcription loop ──
     private CancellationTokenSource? _loopCts;
     private Task? _loopTask;
     private int _lastProcessedSample;
     private double _emaInferenceTimeMs;
-    private string? _lastDetectedLanguage;
     private const double EmaAlpha = 0.20;
     private const double TargetDutyCycle = 0.24;
     private const double MaxDelayMs = 1600;
@@ -58,6 +94,86 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
     public TranscriptionService(AppPreferences prefs)
     {
         _prefs = prefs;
+
+        // Load persisted app mode + translation/TTS preferences.
+        _mode = _prefs.Mode;
+        TranslationSourceLanguageCode = _prefs.TranslationSourceLanguageCode;
+        TranslationTargetLanguageCode = _prefs.TranslationTargetLanguageCode;
+        SpeakTranslatedAudio = _prefs.SpeakTranslatedAudio;
+        TtsRate = _prefs.TtsRate;
+        TtsVoiceId = _prefs.TtsVoiceId;
+        TtsEvidenceWavPath = _ttsService.LatestEvidenceWavPath;
+
+        _ttsService.PlaybackStateChanged += speaking =>
+        {
+            PostUI(() =>
+            {
+                IsSpeakingTts = speaking;
+                if (!speaking)
+                    ScheduleResumeAfterTts();
+            });
+        };
+
+        // Best-effort warmup so the first translation doesn't stall on model download.
+        if (Mode == AppMode.Translate)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await PrepareTranslationModelAsync(
+                        TranslationSourceLanguageCode,
+                        TranslationTargetLanguageCode,
+                        CancellationToken.None);
+                }
+                catch
+                {
+                    /* best-effort */
+                }
+            });
+        }
+    }
+
+    public void SetMode(AppMode mode)
+    {
+        if (Mode == mode) return;
+
+        Mode = mode;
+        _prefs.Mode = mode;
+
+        if (mode == AppMode.Transcribe)
+        {
+            try { _translationCts?.Cancel(); } catch { /* best-effort */ }
+            _translationCts = null;
+            try { _resumeAfterTtsCts?.Cancel(); } catch { /* best-effort */ }
+            _resumeAfterTtsCts = null;
+
+            ResetTranslationState(stopTts: true);
+            TranslationModelReady = false;
+            TranslationDownloadProgress = 0;
+            TranslationDownloadStatus = null;
+            MicStoppedForTts = false;
+            DetectedLanguage = null;
+        }
+        else
+        {
+            // Best-effort warmup so the first translation doesn't stall on model download.
+            var src = TranslationSourceLanguageCode;
+            var tgt = TranslationTargetLanguageCode;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await PrepareTranslationModelAsync(src, tgt, CancellationToken.None);
+                }
+                catch
+                {
+                    /* best-effort */
+                }
+            });
+
+            ScheduleTranslationUpdate();
+        }
     }
 
     // ── Model lifecycle ──
@@ -79,7 +195,7 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
         }
 
         _currentModel = model;
-        _lastDetectedLanguage = null;
+        DetectedLanguage = null;
 
         try
         {
@@ -188,7 +304,10 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
 
     // ── Recording ──
 
-    public void StartRecording(CaptureSource source = CaptureSource.Microphone)
+    public void StartRecording(CaptureSource source = CaptureSource.Microphone) =>
+        StartRecordingInternal(source, isResumeAfterTts: false);
+
+    private void StartRecordingInternal(CaptureSource source, bool isResumeAfterTts)
     {
         if (SessionState != SessionState.Idle || ModelState != ASRModelState.Loaded)
             return;
@@ -201,9 +320,16 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
         _lastProcessedSample = 0;
         _vadSilentCount = 0;
         _emaInferenceTimeMs = 0;
-        _lastDetectedLanguage = null;
+        DetectedLanguage = null;
         ConfirmedText = "";
         HypothesisText = "";
+        ResetTranslationState(stopTts: true);
+
+        if (!isResumeAfterTts)
+        {
+            // Treat this as a new user-initiated session: clear any stale evidence.
+            TtsEvidenceWavPath = null;
+        }
 
         try
         {
@@ -269,6 +395,9 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
             HypothesisText = "";
         }
 
+        if (Mode == AppMode.Translate)
+            ScheduleTranslationUpdate();
+
         if (_prefs.EvidenceMode)
         {
             if (_prefs.EvidenceIncludeTranscriptText)
@@ -281,13 +410,74 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
             }
         }
 
-        // Persist to history (best-effort, off the UI thread)
+        // Persist to history (best-effort, off the UI thread).
+        // If in Translate mode and the translated snapshot is still empty, compute once before saving.
         var textToSave = ConfirmedText;
+        var translatedTextSnapshot = TranslatedConfirmedText;
+        var translationSrcToSave = (TranslationSourceLanguageCode ?? "").Trim().ToLowerInvariant();
+        var translationTgtToSave = (TranslationTargetLanguageCode ?? "").Trim().ToLowerInvariant();
+        var ttsEvidencePathSnapshot = TtsEvidenceWavPath;
         var samplesToSave = _recorder.GetAudioSamples();
         var durationToSave = _recorder.BufferSeconds;
         var modelUsed = _currentModel?.DisplayName ?? "";
-        var language = _lastDetectedLanguage;
-        SaveToHistoryAsync(textToSave, samplesToSave, durationToSave, modelUsed, language);
+        var language = DetectedLanguage;
+
+        if (Mode == AppMode.Translate)
+        {
+            _ = Task.Run(async () =>
+            {
+                string? translatedToSave = translatedTextSnapshot;
+
+                if (translationSrcToSave.Length > 0 &&
+                    translationTgtToSave.Length > 0 &&
+                    translationSrcToSave != translationTgtToSave &&
+                    !string.IsNullOrWhiteSpace(textToSave) &&
+                    string.IsNullOrWhiteSpace(translatedToSave))
+                {
+                    try
+                    {
+                        await _translationEngine.PrepareAsync(translationSrcToSave, translationTgtToSave, CancellationToken.None);
+                        translatedToSave = await _translationEngine.TranslateAsync(
+                            textToSave,
+                            translationSrcToSave,
+                            translationTgtToSave,
+                            CancellationToken.None);
+                    }
+                    catch
+                    {
+                        translatedToSave = null;
+                    }
+                }
+
+                // Only persist translation text if src != tgt.
+                if (translationSrcToSave == translationTgtToSave)
+                    translatedToSave = null;
+
+                SaveToHistoryAsync(
+                    text: textToSave,
+                    translatedText: translatedToSave,
+                    translationSourceLanguage: translationSrcToSave,
+                    translationTargetLanguage: translationTgtToSave,
+                    ttsEvidenceWavPath: ttsEvidencePathSnapshot,
+                    audioSamples: samplesToSave,
+                    durationSeconds: durationToSave,
+                    modelUsed: modelUsed,
+                    language: language);
+            });
+        }
+        else
+        {
+            SaveToHistoryAsync(
+                text: textToSave,
+                translatedText: null,
+                translationSourceLanguage: null,
+                translationTargetLanguage: null,
+                ttsEvidenceWavPath: null,
+                audioSamples: samplesToSave,
+                durationSeconds: durationToSave,
+                modelUsed: modelUsed,
+                language: language);
+        }
 
         SessionState = SessionState.Idle;
     }
@@ -306,19 +496,58 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
         int threads = ComputeThreads();
         var result = await _engine.TranscribeAsync(audioSamples, threads, "auto", ct);
         if (!string.IsNullOrWhiteSpace(result.DetectedLanguage))
-            _lastDetectedLanguage = result.DetectedLanguage;
+        {
+            var detected = result.DetectedLanguage.Trim();
+            PostUI(() =>
+            {
+                DetectedLanguage = detected;
+                ApplyDetectedLanguageToTranslation(DetectedLanguage);
+            });
+        }
 
         // Set confirmed text for save button visibility
         _chunkManager.ConfirmedText = result.Text;
         ConfirmedText = result.Text;
         HypothesisText = "";
+        if (Mode == AppMode.Translate)
+            ScheduleTranslationUpdate();
 
         // Persist file transcriptions too (best-effort)
         if (!string.IsNullOrWhiteSpace(result.Text))
         {
             var duration = audioSamples.Length / 16000.0;
             var modelUsed = _currentModel?.DisplayName ?? "";
-            SaveToHistoryAsync(result.Text, audioSamples, duration, modelUsed, result.DetectedLanguage);
+
+            // Best-effort: run translation once for file transcription so history includes it.
+            var src = (TranslationSourceLanguageCode ?? "").Trim().ToLowerInvariant();
+            var tgt = (TranslationTargetLanguageCode ?? "").Trim().ToLowerInvariant();
+            string? translated = null;
+            bool translateForHistory = Mode == AppMode.Translate && src.Length > 0 && tgt.Length > 0 && src != tgt;
+            if (translateForHistory)
+            {
+                try
+                {
+                    await PrepareTranslationModelAsync(src, tgt, ct);
+                    translated = await _translationEngine.TranslateAsync(result.Text, src, tgt, ct);
+                }
+                catch
+                {
+                    translated = null;
+                }
+            }
+
+            var srcForSave = Mode == AppMode.Translate ? src : null;
+            var tgtForSave = Mode == AppMode.Translate ? tgt : null;
+            SaveToHistoryAsync(
+                text: result.Text,
+                translatedText: translated,
+                translationSourceLanguage: srcForSave,
+                translationTargetLanguage: tgtForSave,
+                ttsEvidenceWavPath: null,
+                audioSamples: audioSamples,
+                durationSeconds: duration,
+                modelUsed: modelUsed,
+                language: result.DetectedLanguage);
         }
 
         return result;
@@ -390,8 +619,15 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
                     _engine.ResetStreamingState();
                     hypothesisText = "";
 
-                    if (segment?.DetectedLanguage != null)
-                        _lastDetectedLanguage = segment.DetectedLanguage;
+                    if (!string.IsNullOrWhiteSpace(segment?.DetectedLanguage))
+                    {
+                        var detected = segment.DetectedLanguage.Trim();
+                        PostUI(() =>
+                        {
+                            DetectedLanguage = detected;
+                            ApplyDetectedLanguageToTranslation(DetectedLanguage);
+                        });
+                    }
                 }
 
                 var confirmed = streamingConfirmedText;
@@ -400,6 +636,8 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
                 {
                     ConfirmedText = confirmed;
                     HypothesisText = hypothesis;
+                    if (Mode == AppMode.Translate)
+                        ScheduleTranslationUpdate();
                 });
 
                 await Task.Delay(100, ct); // 100ms polling interval
@@ -471,7 +709,14 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
 
                 double inferenceMs = sw.Elapsed.TotalMilliseconds;
                 if (!string.IsNullOrWhiteSpace(result.DetectedLanguage))
-                    _lastDetectedLanguage = result.DetectedLanguage;
+                {
+                    var detected = result.DetectedLanguage.Trim();
+                    PostUI(() =>
+                    {
+                        DetectedLanguage = detected;
+                        ApplyDetectedLanguageToTranslation(DetectedLanguage);
+                    });
+                }
 
                 // EMA adaptive delay
                 _emaInferenceTimeMs = _emaInferenceTimeMs == 0
@@ -495,6 +740,8 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
                     TokensPerSecond = tokensPerSecond;
                     ConfirmedText = confirmedText;
                     HypothesisText = hypothesisText;
+                    if (Mode == AppMode.Translate)
+                        ScheduleTranslationUpdate();
                 });
 
                 _lastProcessedSample = slice.EndSample;
@@ -527,6 +774,7 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
         _chunkManager.Reset();
         ConfirmedText = "";
         HypothesisText = "";
+        ResetTranslationState(stopTts: true);
         _recorder.ClearBuffers();
     }
 
@@ -542,20 +790,492 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
         };
     }
 
-    public void Dispose()
+    // ── Translation / TTS orchestration ──
+
+    partial void OnTranslationSourceLanguageCodeChanged(string value)
     {
-        CancelLoop();
-        _recorder.Dispose();
-        _engine?.Dispose(); // Dispose calls Release internally
+        _prefs.TranslationSourceLanguageCode = value;
+        ResetTranslationState(stopTts: false);
+        if (Mode == AppMode.Translate)
+        {
+            var src = TranslationSourceLanguageCode;
+            var tgt = TranslationTargetLanguageCode;
+            _ = Task.Run(() => PrepareTranslationModelAsync(src, tgt, CancellationToken.None));
+            ScheduleTranslationUpdate();
+        }
     }
+
+    partial void OnTranslationTargetLanguageCodeChanged(string value)
+    {
+        _prefs.TranslationTargetLanguageCode = value;
+        ResetTranslationState(stopTts: true);
+        if (Mode == AppMode.Translate)
+        {
+            var src = TranslationSourceLanguageCode;
+            var tgt = TranslationTargetLanguageCode;
+            _ = Task.Run(() => PrepareTranslationModelAsync(src, tgt, CancellationToken.None));
+            ScheduleTranslationUpdate();
+        }
+    }
+
+    partial void OnSpeakTranslatedAudioChanged(bool value)
+    {
+        _prefs.SpeakTranslatedAudio = value;
+        if (!value)
+            _ttsService.Stop();
+    }
+
+    partial void OnTtsRateChanged(double value)
+    {
+        _prefs.TtsRate = (float)value;
+    }
+
+    partial void OnTtsVoiceIdChanged(string? value)
+    {
+        _prefs.TtsVoiceId = value;
+    }
+
+    private void ResetTranslationState(bool stopTts)
+    {
+        try
+        {
+            _translationCts?.Cancel();
+        }
+        catch
+        {
+            /* best-effort */
+        }
+        _translationCts = null;
+
+        TranslatedConfirmedText = "";
+        TranslatedHypothesisText = "";
+        TranslationWarning = null;
+        _lastTranslationInput = null;
+        _lastSpokenTranslatedConfirmed = "";
+
+        if (stopTts)
+        {
+            try { _ttsService.Stop(); }
+            catch { /* best-effort */ }
+        }
+    }
+
+    public void ScheduleTranslationUpdate()
+    {
+        // Always called on UI thread (from PostUI or user actions).
+        try { _translationCts?.Cancel(); } catch { /* best-effort */ }
+
+        if (Mode != AppMode.Translate)
+        {
+            ResetTranslationState(stopTts: true);
+            TranslationModelReady = false;
+            TranslationDownloadProgress = 0;
+            TranslationDownloadStatus = null;
+            return;
+        }
+
+        var src = (TranslationSourceLanguageCode ?? "").Trim().ToLowerInvariant();
+        var tgt = (TranslationTargetLanguageCode ?? "").Trim().ToLowerInvariant();
+        if (src.Length == 0 || tgt.Length == 0)
+        {
+            TranslationWarning = "Set source and target language codes to translate.";
+            TranslationModelReady = false;
+            TranslationDownloadProgress = 0;
+            TranslationDownloadStatus = null;
+            return;
+        }
+
+        var confirmedSnapshot = ConfirmedText ?? "";
+        var hypothesisSnapshot = HypothesisText ?? "";
+
+        // If there's no text, keep the translation UI clean.
+        if (string.IsNullOrWhiteSpace(confirmedSnapshot) && string.IsNullOrWhiteSpace(hypothesisSnapshot))
+        {
+            ResetTranslationState(stopTts: false);
+            return;
+        }
+
+        var key = (confirmed: confirmedSnapshot, hypothesis: hypothesisSnapshot, src, tgt);
+        if (_lastTranslationInput.HasValue && _lastTranslationInput.Value.Equals(key))
+            return;
+
+        var cts = new CancellationTokenSource();
+        _translationCts = cts;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(180, cts.Token); // debounce
+                await RunTranslationAsync(
+                    confirmedSnapshot,
+                    hypothesisSnapshot,
+                    src,
+                    tgt,
+                    cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // ignored
+            }
+            catch (Exception ex)
+            {
+                PostUI(() => TranslationWarning = $"Translation failed: {ex.Message}");
+            }
+        }, cts.Token);
+    }
+
+    private async Task RunTranslationAsync(
+        string confirmedSnapshot,
+        string hypothesisSnapshot,
+        string sourceLanguageCode,
+        string targetLanguageCode,
+        CancellationToken ct)
+    {
+        if (Mode != AppMode.Translate) return;
+
+        string translatedConfirmed = "";
+        string translatedHypothesis = "";
+        string? warning = null;
+
+        if (sourceLanguageCode == targetLanguageCode)
+        {
+            // No translation needed; show blank or passthrough is ambiguous, so keep passthrough for UI clarity.
+            translatedConfirmed = confirmedSnapshot.Trim();
+            translatedHypothesis = hypothesisSnapshot.Trim();
+
+            // Still treat the "model" as ready since no MT is required.
+            PostUI(() =>
+            {
+                TranslationModelReady = true;
+                TranslationDownloadProgress = 0;
+                TranslationDownloadStatus = null;
+            });
+        }
+        else
+        {
+            try
+            {
+                await PrepareTranslationModelAsync(sourceLanguageCode, targetLanguageCode, ct);
+
+                translatedConfirmed = confirmedSnapshot.Trim().Length == 0
+                    ? ""
+                    : await _translationEngine.TranslateAsync(
+                        confirmedSnapshot,
+                        sourceLanguageCode,
+                        targetLanguageCode,
+                        ct);
+
+                translatedHypothesis = hypothesisSnapshot.Trim().Length == 0
+                    ? ""
+                    : await _translationEngine.TranslateAsync(
+                        hypothesisSnapshot,
+                        sourceLanguageCode,
+                        targetLanguageCode,
+                        ct);
+            }
+            catch (Exception ex)
+            {
+                warning = ex.Message;
+                translatedConfirmed = confirmedSnapshot.Trim();
+                translatedHypothesis = hypothesisSnapshot.Trim();
+            }
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        PostUI(() =>
+        {
+            TranslatedConfirmedText = TextDelta.NormalizeDisplayText(translatedConfirmed);
+            TranslatedHypothesisText = TextDelta.NormalizeDisplayText(translatedHypothesis);
+            TranslationWarning = warning ?? _translationEngine.Warning;
+            TranslationModelReady = sourceLanguageCode == targetLanguageCode ? true : _translationEngine.ModelReady;
+            TranslationDownloadProgress = sourceLanguageCode == targetLanguageCode ? 0 : _translationEngine.DownloadProgress;
+            TranslationDownloadStatus = sourceLanguageCode == targetLanguageCode ? null : _translationEngine.DownloadStatus;
+            _lastTranslationInput = (confirmedSnapshot, hypothesisSnapshot, sourceLanguageCode, targetLanguageCode);
+        });
+
+        if (Mode == AppMode.Translate && SpeakTranslatedAudio && sourceLanguageCode != targetLanguageCode)
+        {
+            await SpeakTranslatedDeltaIfNeededAsync(translatedConfirmed, targetLanguageCode);
+        }
+    }
+
+    private async Task PrepareTranslationModelAsync(string sourceLanguageCode, string targetLanguageCode, CancellationToken ct)
+    {
+        var src = (sourceLanguageCode ?? "").Trim().ToLowerInvariant();
+        var tgt = (targetLanguageCode ?? "").Trim().ToLowerInvariant();
+        if (Mode != AppMode.Translate || src.Length == 0 || tgt.Length == 0)
+        {
+            PostUI(() =>
+            {
+                TranslationModelReady = false;
+                TranslationDownloadProgress = 0;
+                TranslationDownloadStatus = null;
+            });
+            return;
+        }
+
+        if (src == tgt)
+        {
+            PostUI(() =>
+            {
+                TranslationModelReady = true;
+                TranslationDownloadProgress = 0;
+                TranslationDownloadStatus = null;
+            });
+            return;
+        }
+
+        OfflineTranscription.App.Evidence.LogEvent("translation_model_prepare_start", new
+        {
+            source = src,
+            target = tgt
+        });
+
+        // Poll the translation engine state while PrepareAsync runs so the UI can show progress.
+        using var pollCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var pollTask = Task.Run(async () =>
+        {
+            try
+            {
+                using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(120));
+                while (await timer.WaitForNextTickAsync(pollCts.Token))
+                {
+                    PostUI(() =>
+                    {
+                        TranslationModelReady = _translationEngine.ModelReady;
+                        TranslationDownloadProgress = _translationEngine.DownloadProgress;
+                        TranslationDownloadStatus = _translationEngine.DownloadStatus;
+                        if (!string.IsNullOrWhiteSpace(_translationEngine.Warning))
+                            TranslationWarning = _translationEngine.Warning;
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // ignored
+            }
+        }, pollCts.Token);
+
+        try
+        {
+            await _translationEngine.PrepareAsync(src, tgt, ct);
+        }
+        catch (Exception ex)
+        {
+            OfflineTranscription.App.Evidence.LogEvent("translation_model_prepare_failed", new
+            {
+                source = src,
+                target = tgt,
+                error = ex.ToString()
+            }, level: "error");
+            throw;
+        }
+        finally
+        {
+            try { pollCts.Cancel(); } catch { /* best-effort */ }
+            try { await pollTask; } catch { /* best-effort */ }
+        }
+
+        PostUI(() =>
+        {
+            TranslationModelReady = _translationEngine.ModelReady;
+            TranslationDownloadProgress = _translationEngine.DownloadProgress;
+            TranslationDownloadStatus = _translationEngine.DownloadStatus;
+            if (!string.IsNullOrWhiteSpace(_translationEngine.Warning))
+                TranslationWarning = _translationEngine.Warning;
+        });
+
+        OfflineTranscription.App.Evidence.LogEvent("translation_model_prepare_done", new
+        {
+            source = src,
+            target = tgt,
+            ready = _translationEngine.ModelReady
+        });
+    }
+
+    private async Task SpeakTranslatedDeltaIfNeededAsync(string translatedConfirmed, string languageCode)
+    {
+        if (Mode != AppMode.Translate) return;
+        if (!SpeakTranslatedAudio) return;
+
+        var normalized = TextDelta.NormalizeDisplayText(translatedConfirmed);
+        if (string.IsNullOrWhiteSpace(normalized)) return;
+
+        var delta = TextDelta.ComputeDelta(normalized, _lastSpokenTranslatedConfirmed);
+        if (!TextDelta.IsMeaningfulDelta(delta)) return;
+
+        var micStoppedOk = false;
+        try
+        {
+            micStoppedOk = await PostUIAsync(EnforceMicStoppedForTtsOnUIThread);
+        }
+        catch
+        {
+            micStoppedOk = false;
+        }
+
+        if (!micStoppedOk)
+        {
+            await PostUIAsync(() =>
+            {
+                TranslationWarning = "Microphone is still active; skipped TTS playback to avoid feedback loop.";
+            });
+            return;
+        }
+
+        try
+        {
+            PostUI(() =>
+            {
+                TtsStartCount++;
+            });
+
+            OfflineTranscription.App.Evidence.LogEvent("tts_speak_delta", new
+            {
+                language = languageCode,
+                rate = TtsRate,
+                textLength = delta.Length
+            });
+
+            await _ttsService.SpeakAsync(
+                delta,
+                languageCode,
+                (float)TtsRate,
+                voiceId: TtsVoiceId,
+                ct: CancellationToken.None);
+
+            _lastSpokenTranslatedConfirmed = normalized;
+            PostUI(() => TtsEvidenceWavPath = _ttsService.LatestEvidenceWavPath);
+        }
+        catch (Exception ex)
+        {
+            PostUI(() =>
+            {
+                MicStoppedForTts = false;
+                TranslationWarning = $"TTS failed: {ex.Message}";
+            });
+        }
+    }
+
+    private bool EnforceMicStoppedForTtsOnUIThread()
+    {
+        // Must run on UI thread: updates observable state + stops capture loop.
+        StopRecordingForTtsIfNeededOnUIThread();
+
+        if (SessionState == SessionState.Recording || Recorder.IsRecording)
+        {
+            TtsMicGuardViolations++;
+            try
+            {
+                CancelLoop();
+                Recorder.StopRecording();
+            }
+            catch { /* best-effort */ }
+            SessionState = SessionState.Idle;
+            MicStoppedForTts = true;
+        }
+
+        return SessionState == SessionState.Idle && !Recorder.IsRecording;
+    }
+
+    private void StopRecordingForTtsIfNeededOnUIThread()
+    {
+        if (SessionState is not (SessionState.Recording or SessionState.Starting))
+            return;
+
+        // Stop capture/inference without persisting history (TTS feedback guard).
+        SessionState = SessionState.Stopping;
+        CancelLoop();
+        Recorder.StopRecording();
+        SessionState = SessionState.Idle;
+        MicStoppedForTts = true;
+    }
+
+    private void ScheduleResumeAfterTts()
+    {
+        if (Mode != AppMode.Translate) return;
+        if (!MicStoppedForTts) return;
+
+        try { _resumeAfterTtsCts?.Cancel(); } catch { /* best-effort */ }
+        var cts = new CancellationTokenSource();
+        _resumeAfterTtsCts = cts;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(220, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            PostUI(() =>
+            {
+                if (Mode != AppMode.Translate) return;
+                if (!MicStoppedForTts) return;
+                if (IsSpeakingTts) return;
+                _ = ResumeRecordingAfterTtsAsync();
+            });
+        }, cts.Token);
+    }
+
+    private async Task ResumeRecordingAfterTtsAsync()
+    {
+        if (Mode != AppMode.Translate) return;
+        if (!MicStoppedForTts) return;
+        if (SessionState != SessionState.Idle) return;
+        if (ModelState != ASRModelState.Loaded) return;
+
+        // Clear state for a fresh interpretation segment.
+        _chunkManager.Reset();
+        ConfirmedText = "";
+        HypothesisText = "";
+        TranslatedConfirmedText = "";
+        TranslatedHypothesisText = "";
+        TranslationWarning = null;
+        _lastTranslationInput = null;
+        _lastSpokenTranslatedConfirmed = "";
+        DetectedLanguage = null;
+
+        Recorder.ClearBuffers();
+
+        MicStoppedForTts = false;
+
+        await Task.Yield();
+
+        // Resume with the current capture source preference.
+        StartRecordingInternal(_prefs.CaptureSource, isResumeAfterTts: true);
+    }
+
+    private void ApplyDetectedLanguageToTranslation(string? lang)
+    {
+        if (Mode != AppMode.Translate) return;
+        if (string.IsNullOrWhiteSpace(lang)) return;
+
+        var detected = lang.Trim().ToLowerInvariant();
+        var currentSource = (TranslationSourceLanguageCode ?? "").Trim().ToLowerInvariant();
+        var currentTarget = (TranslationTargetLanguageCode ?? "").Trim().ToLowerInvariant();
+
+        if (detected == currentTarget && detected != currentSource)
+        {
+            TranslationSourceLanguageCode = currentTarget;
+            TranslationTargetLanguageCode = currentSource;
+        }
+    }
+
+    // ── UI posting helpers ──
 
     private static void PostUI(Action action)
     {
         var window = OfflineTranscription.App.MainWindow;
         if (window == null)
         {
-            // No window available — skip to avoid cross-thread UI violations.
-            Debug.WriteLine("[TranscriptionService] PostUI skipped: MainWindow is null");
+            // No window available yet (startup) — safe to run inline.
+            action();
             return;
         }
 
@@ -567,6 +1287,67 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
         {
             window.DispatcherQueue.TryEnqueue(() => action());
         }
+    }
+
+    private static Task PostUIAsync(Action action)
+    {
+        var window = OfflineTranscription.App.MainWindow;
+        if (window == null)
+        {
+            action();
+            return Task.CompletedTask;
+        }
+
+        if (window.DispatcherQueue.HasThreadAccess)
+        {
+            action();
+            return Task.CompletedTask;
+        }
+
+        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!window.DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                action();
+                tcs.TrySetResult(null);
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        }))
+        {
+            tcs.TrySetResult(null);
+        }
+        return tcs.Task;
+    }
+
+    private static Task<T> PostUIAsync<T>(Func<T> func)
+    {
+        var window = OfflineTranscription.App.MainWindow;
+        if (window == null)
+            return Task.FromResult(func());
+
+        if (window.DispatcherQueue.HasThreadAccess)
+            return Task.FromResult(func());
+
+        var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!window.DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                tcs.TrySetResult(func());
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        }))
+        {
+            tcs.TrySetResult(default!);
+        }
+        return tcs.Task;
     }
 
     private void CancelLoop()
@@ -593,6 +1374,10 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
 
     private static void SaveToHistoryAsync(
         string text,
+        string? translatedText,
+        string? translationSourceLanguage,
+        string? translationTargetLanguage,
+        string? ttsEvidenceWavPath,
         float[] audioSamples,
         double durationSeconds,
         string modelUsed,
@@ -611,10 +1396,16 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
                 {
                     Id = Guid.NewGuid().ToString(),
                     Text = text.Trim(),
+                    TranslatedText = string.IsNullOrWhiteSpace(translatedText) ? null : translatedText.Trim(),
                     CreatedAt = DateTime.UtcNow,
                     DurationSeconds = durationSeconds,
                     ModelUsed = modelUsed,
-                    Language = string.IsNullOrWhiteSpace(language) ? null : language.Trim()
+                    Language = string.IsNullOrWhiteSpace(language) ? null : language.Trim(),
+                    TranslationSourceLanguage = string.IsNullOrWhiteSpace(translationSourceLanguage) ? null : translationSourceLanguage.Trim(),
+                    TranslationTargetLanguage = string.IsNullOrWhiteSpace(translationTargetLanguage) ? null : translationTargetLanguage.Trim(),
+                    TranslationModelId = TranslationModelInfo.Find(
+                        translationSourceLanguage ?? "",
+                        translationTargetLanguage ?? "")?.Id
                 };
 
                 try
@@ -628,6 +1419,17 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
                     record.AudioFileName = null;
                 }
 
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(ttsEvidenceWavPath) && File.Exists(ttsEvidenceWavPath))
+                        record.TtsEvidenceFileName = SessionFileManager.SaveTtsEvidence(record.Id, ttsEvidenceWavPath);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[TranscriptionService] Failed to save TTS evidence: {ex.Message}");
+                    record.TtsEvidenceFileName = null;
+                }
+
                 using var db = new AppDbContext();
                 db.Transcriptions.Add(record);
                 db.SaveChanges();
@@ -637,5 +1439,14 @@ public sealed partial class TranscriptionService : ObservableObject, IDisposable
                 Debug.WriteLine($"[TranscriptionService] Failed to save history record: {ex.Message}");
             }
         });
+    }
+
+    public void Dispose()
+    {
+        CancelLoop();
+        _recorder.Dispose();
+        _engine?.Dispose(); // Dispose calls Release internally
+        try { _translationEngine.Dispose(); } catch { /* best-effort */ }
+        try { _ttsService.Dispose(); } catch { /* best-effort */ }
     }
 }

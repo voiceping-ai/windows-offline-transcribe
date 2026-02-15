@@ -10,10 +10,18 @@ namespace OfflineTranscription.Views;
 public sealed partial class SettingsPage : Page
 {
     public AppPreferences Prefs => App.Preferences;
-    private TranscriptionService Service => App.TranscriptionService;
+    public TranscriptionService Service => App.TranscriptionService;
     private EvidenceService Evidence => App.Evidence;
 
     private bool _initializing;
+
+    public Visibility ShowTranslateSettings =>
+        Service.Mode == AppMode.Translate ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ShowTranscribeTranslationNote =>
+        Service.Mode == AppMode.Transcribe ? Visibility.Visible : Visibility.Collapsed;
+
+    public string TtsRateLabel => $"TTS Rate: {Service.TtsRate:0.00}x";
 
     public SettingsPage()
     {
@@ -29,6 +37,12 @@ public sealed partial class SettingsPage : Page
         EvidenceModeToggle.IsOn = Prefs.EvidenceMode;
         EvidenceIncludeTextToggle.IsOn = Prefs.EvidenceIncludeTranscriptText;
         UpdateEvidenceStatusText();
+
+        Service.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(TranscriptionService.TtsRate) or nameof(TranscriptionService.Mode))
+                DispatcherQueue.TryEnqueue(() => Bindings.Update());
+        };
 
         _initializing = false;
     }

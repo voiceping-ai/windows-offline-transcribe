@@ -13,8 +13,14 @@
         SelectionChanged="NavView_SelectionChanged">
 
         <NavigationView.MenuItems>
-            <NavigationViewItem Content="Transcribe" Tag="Transcription"
+            <NavigationViewItem x:Name="NavTranscribeItem"
+                                Content="Transcribe"
+                                Tag="Transcribe"
                                 Icon="Microphone" />
+            <NavigationViewItem x:Name="NavTranslateItem"
+                                Content="Translate"
+                                Tag="Translate"
+                                Icon="Globe" />
             <NavigationViewItem Content="History" Tag="History"
                                 Icon="Clock" />
             <NavigationViewItem Content="Settings" Tag="Settings"

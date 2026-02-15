@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using OfflineTranscription.Data;
 using OfflineTranscription.Interop;
 using OfflineTranscription.Services;
+using OfflineTranscription.Utilities;
 using OfflineTranscription.ViewModels;
 
 namespace OfflineTranscription;
@@ -12,7 +13,7 @@ public partial class App : Application
     public static Window? MainWindow { get; private set; }
 
     // ── Shared services (poor man's DI) ──
-    public static AppPreferences Preferences { get; } = new();
+    public static AppPreferences Preferences { get; private set; } = null!;
     public static EvidenceService Evidence { get; private set; } = null!;
     public static TranscriptionService TranscriptionService { get; private set; } = null!;
     public static TranscriptionViewModel TranscriptionVM { get; private set; } = null!;
@@ -25,6 +26,10 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // Best-effort migration from the legacy OfflineSpeechTranslation Windows app.
+        LegacyMigration.TryMigrateFromOfflineSpeechTranslation();
+        Preferences = new AppPreferences();
+
         Evidence = new EvidenceService(Preferences);
         TranscriptionService = new TranscriptionService(Preferences);
         TranscriptionVM = new TranscriptionViewModel(TranscriptionService, Preferences);

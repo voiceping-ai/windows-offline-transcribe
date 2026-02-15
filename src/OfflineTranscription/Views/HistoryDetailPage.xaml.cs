@@ -48,6 +48,19 @@ public sealed partial class HistoryDetailPage : Page
         LanguageText.Text = _record.Language ?? "";
         TranscriptText.Text = _record.Text;
 
+        if (!string.IsNullOrWhiteSpace(_record.TranslatedText))
+        {
+            TranslationSection.Visibility = Visibility.Visible;
+            TranslationText.Text = _record.TranslatedText;
+            CopyTranslationButton.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            TranslationSection.Visibility = Visibility.Collapsed;
+            TranslationText.Text = "";
+            CopyTranslationButton.Visibility = Visibility.Collapsed;
+        }
+
         // Show waveform if audio available
         if (SessionFileManager.HasAudio(_record.AudioFileName))
         {
@@ -57,12 +70,22 @@ public sealed partial class HistoryDetailPage : Page
         }
     }
 
-    private void CopyText_Click(object sender, RoutedEventArgs e)
+    private void CopyTranscript_Click(object sender, RoutedEventArgs e)
     {
         if (_record == null) return;
-        App.Evidence.LogEvent("history_copy_text", new { recordId = _record.Id });
+        App.Evidence.LogEvent("history_copy_transcript", new { recordId = _record.Id });
         var dp = new DataPackage();
         dp.SetText(_record.Text);
+        Clipboard.SetContent(dp);
+    }
+
+    private void CopyTranslation_Click(object sender, RoutedEventArgs e)
+    {
+        if (_record == null) return;
+        if (string.IsNullOrWhiteSpace(_record.TranslatedText)) return;
+        App.Evidence.LogEvent("history_copy_translation", new { recordId = _record.Id });
+        var dp = new DataPackage();
+        dp.SetText(_record.TranslatedText);
         Clipboard.SetContent(dp);
     }
 
@@ -78,7 +101,10 @@ public sealed partial class HistoryDetailPage : Page
             var picker = new FileSavePicker();
             picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
             picker.FileTypeChoices.Add("ZIP Archive", [".zip"]);
-            picker.SuggestedFileName = $"transcription_{_record.CreatedAt:yyyyMMdd_HHmmss}";
+            bool hasTranslation = !string.IsNullOrWhiteSpace(_record.TranslatedText);
+            bool hasTtsEvidence = !string.IsNullOrWhiteSpace(_record.TtsEvidenceFileName);
+            string prefix = (hasTranslation || hasTtsEvidence) ? "speech_translation" : "transcription";
+            picker.SuggestedFileName = $"{prefix}_{_record.CreatedAt:yyyyMMdd_HHmmss}";
 
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);

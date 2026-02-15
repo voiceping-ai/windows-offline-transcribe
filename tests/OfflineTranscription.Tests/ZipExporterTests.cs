@@ -147,4 +147,60 @@ public class ZipExporterTests : IDisposable
         Assert.EndsWith(".zip", fileName);
         Assert.Matches(@"transcription_\d{8}_\d{6}\.zip", fileName);
     }
+
+    [Fact]
+    public void Export_WhenTranslationPresent_IncludesTranslationTxt_AndUsesSpeechTranslationPrefix()
+    {
+        var record = new TranscriptionRecord
+        {
+            Text = "hello",
+            TranslatedText = "こんにちは",
+            DurationSeconds = 1.0,
+            ModelUsed = "whisper-base"
+        };
+
+        var zipPath = ZipExporter.Export(record, _tempDir);
+        var fileName = Path.GetFileName(zipPath);
+        Assert.StartsWith("speech_translation_", fileName);
+
+        using var archive = ZipFile.OpenRead(zipPath);
+        var entryNames = archive.Entries.Select(e => e.FullName).ToList();
+        Assert.Contains("translation.txt", entryNames);
+    }
+
+    [Fact]
+    public void Export_WhenTtsEvidencePresent_IncludesTtsWav_AndUsesSpeechTranslationPrefix()
+    {
+        var sessionId = $"zip-tts-{Guid.NewGuid():N}";
+        var sourceDir = Path.Combine(Path.GetTempPath(), $"zip_tts_src_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(sourceDir);
+        var sourcePath = Path.Combine(sourceDir, "tts.wav");
+        File.WriteAllBytes(sourcePath, new byte[] { 1, 2, 3, 4 });
+
+        try
+        {
+            var rel = SessionFileManager.SaveTtsEvidence(sessionId, sourcePath);
+
+            var record = new TranscriptionRecord
+            {
+                Text = "hello",
+                DurationSeconds = 1.0,
+                ModelUsed = "whisper-base",
+                TtsEvidenceFileName = rel
+            };
+
+            var zipPath = ZipExporter.Export(record, _tempDir);
+            var fileName = Path.GetFileName(zipPath);
+            Assert.StartsWith("speech_translation_", fileName);
+
+            using var archive = ZipFile.OpenRead(zipPath);
+            var entryNames = archive.Entries.Select(e => e.FullName).ToList();
+            Assert.Contains("tts.wav", entryNames);
+        }
+        finally
+        {
+            try { SessionFileManager.DeleteSession(sessionId); } catch { /* best-effort */ }
+            try { Directory.Delete(sourceDir, recursive: true); } catch { /* best-effort */ }
+        }
+    }
 }

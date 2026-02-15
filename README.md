@@ -3,14 +3,20 @@
 WinUI 3 (Windows App SDK) desktop app for offline speech transcription.
 All ASR inference runs locally after model download.
 
+This repo also supports an optional **Translate** mode (offline MT + optional TTS) in the same app.
+
 ## Current Scope (Code-Accurate)
 
 - Live transcription with confirmed text plus rolling hypothesis.
+- Two UI modes (left-nav):
+  - `Transcribe`: transcription only.
+  - `Translate`: transcription + offline translation + optional TTS playback.
 - Audio source switching: `Microphone`, `System Audio (WASAPI loopback)`.
 - In-app model download/load/switch (12 models across 5 engine types).
 - File transcription (`.wav`, `.mp3`).
 - Runtime stats while recording (`CPU`, `RAM`, `tok/s`, elapsed audio). Note: `tok/s` is a rough word-per-second estimate.
 - History: saves transcript + session audio; export a shareable ZIP (text + metadata + audio).
+  - Translate mode records may also include `translation.txt` and `tts.wav` in the exported ZIP.
 - Diagnostics: `Evidence Mode` (events.jsonl + model manifests + screenshots; export one ZIP).
 
 ## Supported Models
@@ -91,6 +97,24 @@ Provider selection:
 - Works offline if the Windows language pack is installed.
 - Limited accuracy compared to neural ASR models. No native DLLs required.
 
+## Translate Mode
+
+When you select **Translate** in the left navigation:
+
+- The app runs offline machine translation (CTranslate2) on the live transcript.
+- Translation is always active in Translate mode (there is no separate enable toggle).
+- Optional: enable **Speak Translated Audio** (Windows.Media TTS). The app will stop recording during TTS playback to avoid feedback loops, then resume.
+
+Translation settings:
+
+- Configure `Source Language` and `Target Language` in Settings (Translate mode only).
+- Translation models are cached under `%LOCALAPPDATA%\\OfflineTranscription\\TranslationModels\\`.
+
+## Legacy Migration (Windows)
+
+On first run, the app performs a best-effort migration from the legacy Windows app data folder
+`%LOCALAPPDATA%\\OfflineSpeechTranslation\\` into `%LOCALAPPDATA%\\OfflineTranscription\\` when the new location does not already exist.
+
 ## Prereqs
 
 - Windows 10/11 (x64)
@@ -104,6 +128,7 @@ This app uses native engines via P/Invoke:
 - whisper.cpp: `whisper.dll` (see `src/OfflineTranscription/Interop/WhisperNative.cs`)
 - sherpa-onnx C API: `sherpa-onnx-c-api.dll` (see `src/OfflineTranscription/Interop/SherpaOnnxNative.cs`)
 - qwen-asr: `qwen_asr.dll` + `libopenblas.dll` (see `src/OfflineTranscription/Interop/QwenAsrNative.cs`)
+- offline translation (CTranslate2 wrapper): `OfflineTranscription.NativeTranslation.dll` (see `src/OfflineTranscription/Interop/NativeTranslation.cs`)
 - Windows Speech: no native DLLs needed (WinRT API)
 
 Place required `.dll` files in:
@@ -115,8 +140,19 @@ They are copied to the build output directory by `src/OfflineTranscription/Offli
 If you use the sherpa-onnx release bundle, make sure you also include its dependent DLLs
 (for example `onnxruntime.dll` and DirectML-related DLLs if applicable).
 
+### Building `qwen_asr.dll` (Windows)
+
 For qwen-asr, compile `qwen_asr.dll` from [antirez/qwen-asr](https://github.com/antirez/qwen-asr) source
 and place alongside `libopenblas.dll` (from [OpenMathLib/OpenBLAS releases](https://github.com/OpenMathLib/OpenBLAS/releases)).
+
+### Building `OfflineTranscription.NativeTranslation.dll` (Windows)
+
+The native translation wrapper lives in `src/OfflineTranscription.NativeTranslation/` and is built with CMake.
+
+1. Install a C++ toolchain (Visual Studio Build Tools) and CMake.
+2. Build the DLL using the instructions in `src/OfflineTranscription.NativeTranslation/README.md`.
+3. Copy the produced `OfflineTranscription.NativeTranslation.dll` (and any dependency DLLs) into:
+   - `libs/runtimes/win-x64/`
 
 ## Build
 
@@ -139,6 +175,7 @@ dotnet test tests/OfflineTranscription.Tests/OfflineTranscription.Tests.csproj -
 
 - Audio and transcription are processed locally.
 - Network is used for model downloads only.
+- Translate mode downloads offline translation model files on-demand.
 - History and exported ZIPs may contain transcripts and audio.
 - Evidence Mode can optionally include transcript text (toggle in Settings).
 

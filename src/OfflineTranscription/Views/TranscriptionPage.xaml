@@ -29,6 +29,31 @@
                            Opacity="0.4"
                            Text="Press the record button to start transcribing..."
                            Visibility="{x:Bind ShowPlaceholder, Mode=OneWay}" />
+
+                <!-- Translation (Translate mode only) -->
+                <StackPanel Visibility="{x:Bind ShowTranslationSection, Mode=OneWay}">
+                    <Border Height="1" Margin="0,16,0,12" Background="#33000000" />
+
+                    <TextBlock Text="Translation" FontSize="12" Opacity="0.6" Margin="0,0,0,6" />
+                    <TextBlock x:Name="TranslationWarningText"
+                               TextWrapping="Wrap"
+                               FontSize="12"
+                               Opacity="0.7"
+                               Foreground="#FFFF8C00"
+                               Text="{x:Bind VM.Service.TranslationWarning, Mode=OneWay}" />
+                    <TextBlock x:Name="TranslatedConfirmedTextBlock"
+                               TextWrapping="Wrap"
+                               FontSize="16"
+                               IsTextSelectionEnabled="True"
+                               Text="{x:Bind VM.Service.TranslatedConfirmedText, Mode=OneWay}" />
+                    <TextBlock x:Name="TranslatedHypothesisTextBlock"
+                               TextWrapping="Wrap"
+                               FontSize="16"
+                               Opacity="0.6"
+                               FontStyle="Italic"
+                               IsTextSelectionEnabled="True"
+                               Text="{x:Bind VM.Service.TranslatedHypothesisText, Mode=OneWay}" />
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
 

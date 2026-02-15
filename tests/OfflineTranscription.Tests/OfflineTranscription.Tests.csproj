@@ -36,6 +36,7 @@
     <Compile Include="..\..\src\OfflineTranscription\Interop\*.cs" LinkBase="Interop" />
     <Compile Include="..\..\src\OfflineTranscription\Utilities\WavWriter.cs" Link="Utilities\WavWriter.cs" />
     <Compile Include="..\..\src\OfflineTranscription\Utilities\SessionFileManager.cs" Link="Utilities\SessionFileManager.cs" />
+    <Compile Include="..\..\src\OfflineTranscription\Utilities\TextDelta.cs" Link="Utilities\TextDelta.cs" />
     <Compile Include="..\..\src\OfflineTranscription\Utilities\ZipExporter.cs" Link="Utilities\ZipExporter.cs" />
     <Compile Include="..\..\src\OfflineTranscription\Utilities\EvidenceSession.cs" Link="Utilities\EvidenceSession.cs" />
     <Compile Include="..\..\src\OfflineTranscription\Utilities\ModelEvidence.cs" Link="Utilities\ModelEvidence.cs" />

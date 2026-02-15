@@ -19,25 +19,33 @@ This repo also supports an optional **Translate** mode (offline MT + optional TT
   - Translate mode records may also include `translation.txt` and `tts.wav` in the exported ZIP.
 - Diagnostics: `Evidence Mode` (events.jsonl + model manifests + screenshots; export one ZIP).
 
-## Supported Models
+## Supported Models & Benchmarks
 
 Defined in `src/OfflineTranscription/Models/ModelInfo.cs`.
 Models are downloaded from Hugging Face at runtime and stored under `%LOCALAPPDATA%\\OfflineTranscription\\Models\\<model-id>\\`.
 
-| Model ID | Engine | Params | Disk | Languages |
-|---|---|---:|---:|---|
-| `whisper-tiny` | whisper.cpp (C++/P-Invoke) | 39M | ~80 MB | 99 languages |
-| `whisper-base` | whisper.cpp (C++/P-Invoke) | 74M | ~150 MB | 99 languages |
-| `whisper-small` | whisper.cpp (C++/P-Invoke) | 244M | ~500 MB | 99 languages |
-| `whisper-large-v3-turbo` | whisper.cpp (C++/P-Invoke) | 809M | ~834 MB | 99 languages |
-| `sensevoice-small` | sherpa-onnx offline (ONNX Runtime) | 234M | ~240 MB | `zh/en/ja/ko/yue` |
-| `moonshine-tiny` | sherpa-onnx offline (ONNX Runtime) | 27M | ~125 MB | English |
-| `moonshine-base` | sherpa-onnx offline (ONNX Runtime) | 61M | ~290 MB | English |
-| `omnilingual-300m` | sherpa-onnx offline (ONNX Runtime) | 300M | ~365 MB | 1,600+ languages |
-| `parakeet-tdt-v2` | sherpa-onnx offline (ONNX Runtime) | 600M | ~660 MB | English |
-| `zipformer-20m` | sherpa-onnx streaming (ONNX Runtime) | 20M | ~73 MB | English |
-| `qwen3-asr-0.6b` | qwen-asr (C/P-Invoke) | 600M | ~1.9 GB | 52 languages |
-| `windows-speech` | Windows Speech API (WinRT) | N/A | 0 MB | Installed language packs |
+Benchmark: JFK inauguration excerpt (11s, 22 words). Device: i5-1035G1 (4C/8T), 8 GB RAM, CPU-only.
+
+| Model ID | Engine | Params | Disk | Languages | Inference | RTF | Words/s |
+|---|---|---:|---:|---|---:|---:|---:|
+| `moonshine-tiny` | sherpa-onnx offline | 27M | ~125 MB | English | 383 ms | 0.035x | 57.5 |
+| `sensevoice-small` | sherpa-onnx offline | 234M | ~240 MB | zh/en/ja/ko/yue | 443 ms | 0.040x | 49.6 |
+| `moonshine-base` | sherpa-onnx offline | 61M | ~290 MB | English | 653 ms | 0.059x | 33.7 |
+| **`parakeet-tdt-v2`** | **sherpa-onnx offline** | **600M** | **~660 MB** | **English** | **984 ms** | **0.089x** | **22.4** |
+| `zipformer-20m` | sherpa-onnx streaming | 20M | ~73 MB | English | 1,312 ms | 0.119x | 16.8 |
+| `whisper-tiny` | whisper.cpp | 39M | ~80 MB | 99 languages | 1,811 ms | 0.165x | 12.1 |
+| `whisper-base` | whisper.cpp | 74M | ~150 MB | 99 languages | 3,907 ms | 0.355x | 5.6 |
+| `omnilingual-300m` | sherpa-onnx offline | 300M | ~365 MB | 1,600+ languages | 2,059 ms | 0.187x | — |
+| **`qwen3-asr-0.6b`** | **qwen-asr (C)** | **600M** | **~1.9 GB** | **52 languages** | **13,632 ms** | **1.239x** | **1.6** |
+| `whisper-small` | whisper.cpp | 244M | ~500 MB | 99 languages | 18,942 ms | 1.722x | 1.2 |
+| `whisper-large-v3-turbo` | whisper.cpp | 809M | ~834 MB | 99 languages | — | — | — |
+| `windows-speech` | Windows Speech API | N/A | 0 MB | Installed packs | — | — | — |
+
+RTF = Real-Time Factor (lower = faster). RTF < 1.0 means faster than real-time. **Bold** = recommended models.
+
+![Inference Speed](docs/images/benchmark-inference.png)
+
+![Throughput](docs/images/benchmark-throughput.png)
 
 Model weights are not distributed with this repo; model licensing varies. See `NOTICE`.
 

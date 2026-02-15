@@ -23,7 +23,7 @@ $SherpaVersion   = '1.12.25'
 
 # ── URLs ──
 $WhisperUrl = "https://github.com/ggml-org/whisper.cpp/releases/download/v${WhisperVersion}/whisper-bin-x64.zip"
-$SherpaUrl  = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SherpaVersion}/sherpa-onnx-v${SherpaVersion}-win-x64-shared.tar.bz2"
+$SherpaUrl  = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SherpaVersion}/sherpa-onnx-v${SherpaVersion}-win-x64-shared-MD-Release.tar.bz2"
 
 # ── Setup ──
 $tempDir = Join-Path $env:TEMP 'native-deps-download'

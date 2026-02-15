@@ -100,6 +100,11 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Download native dependencies
+        shell: pwsh
+        run: |
+          & "$PWD\scripts\download-native-deps.ps1" -OutputDir (Join-Path $PWD 'libs\runtimes\win-x64')
+
       - name: Publish WinUI app
         shell: pwsh
         run: |
@@ -205,6 +210,14 @@ jobs:
           }
           if (-not (Test-Path (Join-Path $verifyDir 'OfflineTranscription.pri'))) {
             throw "Portable zip does not contain OfflineTranscription.pri (WinUI XAML resources)"
+          }
+
+          # Verify native inference DLLs are present
+          $nativeDlls = @('whisper.dll', 'sherpa-onnx-c-api.dll', 'onnxruntime.dll')
+          foreach ($dll in $nativeDlls) {
+            if (-not (Test-Path (Join-Path $verifyDir $dll))) {
+              throw "Portable zip missing native DLL: $dll"
+            }
           }
 
           $checksumFile = Join-Path $PWD 'artifacts\checksums\windows-binaries.sha256'

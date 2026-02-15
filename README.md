@@ -60,7 +60,7 @@ Device: Intel Core i5-1035G1 @ 1.00 GHz (4C/8T), 8 GB RAM, CPU-only (no GPU).
 
 RTF = Real-Time Factor (lower = faster). RTF < 1.0 means faster than real-time.
 
-> **Want to see a new model or device benchmark?** If there is an offline ASR model you would like added, or you have benchmark results to share from your hardware, please [open an issue](https://github.com/atyenoria/windows-offline-transcribe/issues/new). Community contributions of inference benchmarks on different Windows devices are welcome.
+> **Want to see a new model or device benchmark?** If there is an offline ASR model you would like added, or you have benchmark results to share from your hardware, please [open an issue](https://github.com/voiceping-ai/windows-offline-transcribe/issues/new). Community contributions of inference benchmarks on different Windows devices are welcome.
 
 ## Engines / Inference Methods
 

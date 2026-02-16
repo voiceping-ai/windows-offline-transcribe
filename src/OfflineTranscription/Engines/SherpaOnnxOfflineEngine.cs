@@ -256,9 +256,7 @@ public sealed class SherpaOnnxOfflineEngine : IASREngine
                 throw new NotSupportedException($"Unsupported sherpa-onnx model type: {modelType}");
         }
 
-        // Omnilingual CTC model handles its own preprocessing; skip explicit FeatConfig.
-        if (modelType != SherpaModelType.OmnilingualCtc)
-            config.FeatConfig = new SherpaOnnxFeatureConfig { SampleRate = 16000, FeatureDim = 80 };
+        config.FeatConfig = new SherpaOnnxFeatureConfig { SampleRate = 16000, FeatureDim = 80 };
         config.ModelConfig = modelConfig;
         config.DecodingMethod = pin("greedy_search");
         config.MaxActivePaths = 4;

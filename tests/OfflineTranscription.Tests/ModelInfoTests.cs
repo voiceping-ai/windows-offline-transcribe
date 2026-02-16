@@ -7,8 +7,8 @@ public class ModelInfoTests
     [Fact]
     public void AvailableModels_HasExpectedCount()
     {
-        // 4 whisper + 2 moonshine + 1 sensevoice + 1 omnilingual + 1 parakeet + 1 zipformer + 1 qwen3 + 1 windows-speech = 12
-        Assert.Equal(12, ModelInfo.AvailableModels.Count);
+        // 4 whisper + 2 moonshine + 1 sensevoice + 1 omnilingual + 1 parakeet + 1 zipformer + 1 qwen3 + 1 qwen3-onnx + 1 windows-speech = 13
+        Assert.Equal(13, ModelInfo.AvailableModels.Count);
     }
 
     [Fact]
@@ -68,6 +68,8 @@ public class ModelInfoTests
         Assert.Equal(5, byEngine[EngineType.SherpaOnnxOffline].Count);  // sensevoice, moonshine-tiny, moonshine-base, omnilingual, parakeet-tdt-v2
         Assert.Single(byEngine[EngineType.SherpaOnnxStreaming]);         // zipformer-20m
         Assert.Single(byEngine[EngineType.QwenAsr]);                    // qwen3-asr-0.6b
+        Assert.True(byEngine.ContainsKey(EngineType.QwenAsrOnnx));
+        Assert.Single(byEngine[EngineType.QwenAsrOnnx]);               // qwen3-asr-0.6b-onnx
         Assert.Single(byEngine[EngineType.WindowsSpeech]);              // windows-speech
     }
 

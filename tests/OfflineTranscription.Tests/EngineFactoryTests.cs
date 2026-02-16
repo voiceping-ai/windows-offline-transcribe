@@ -47,8 +47,9 @@ public class EngineFactoryTests
     {
         foreach (var model in ModelInfo.AvailableModels)
         {
-            // WindowsSpeech requires WinRT APIs not available in plain net8.0 test TFM
+            // WindowsSpeech and QwenAsrOnnx require APIs not available in plain net8.0 test TFM
             if (model.EngineType == EngineType.WindowsSpeech) continue;
+            if (model.EngineType == EngineType.QwenAsrOnnx) continue;
 
             using var engine = EngineFactory.Create(model);
             Assert.NotNull(engine);
@@ -61,6 +62,7 @@ public class EngineFactoryTests
         foreach (var model in ModelInfo.AvailableModels)
         {
             if (model.EngineType == EngineType.WindowsSpeech) continue;
+            if (model.EngineType == EngineType.QwenAsrOnnx) continue;
 
             using var engine = EngineFactory.Create(model);
             Assert.False(engine.IsLoaded);

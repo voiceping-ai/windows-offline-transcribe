@@ -103,22 +103,29 @@ jobs:
       - name: Download whisper.cpp DLLs
         shell: cmd
         run: |
-          mkdir libs\runtimes\win-x64
+          if not exist libs\runtimes\win-x64 mkdir libs\runtimes\win-x64
+          echo Downloading whisper.cpp...
           curl.exe -fsSL --retry 3 -o "%RUNNER_TEMP%\whisper.zip" "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.3/whisper-bin-x64.zip"
-          powershell -NoProfile -Command "Expand-Archive -Path '$env:RUNNER_TEMP\whisper.zip' -DestinationPath '$env:RUNNER_TEMP\whisper' -Force"
+          echo Extracting...
+          mkdir "%RUNNER_TEMP%\whisper" 2>NUL
+          tar -xf "%RUNNER_TEMP%\whisper.zip" -C "%RUNNER_TEMP%\whisper"
+          echo Copying DLLs...
           for %%f in (whisper.dll ggml.dll ggml-base.dll ggml-cpu.dll) do (
-            for /R "%RUNNER_TEMP%\whisper" %%g in (%%f) do copy "%%g" "libs\runtimes\win-x64\%%f"
+            for /R "%RUNNER_TEMP%\whisper" %%g in (%%f) do copy /Y "%%g" "libs\runtimes\win-x64\%%f"
           )
           dir libs\runtimes\win-x64\*.dll
 
       - name: Download sherpa-onnx DLLs
         shell: cmd
         run: |
+          echo Downloading sherpa-onnx...
           curl.exe -fsSL --retry 3 -o "%RUNNER_TEMP%\sherpa.tar.bz2" "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.25/sherpa-onnx-v1.12.25-win-x64-shared-MD-Release.tar.bz2"
-          mkdir "%RUNNER_TEMP%\sherpa"
+          echo Extracting...
+          mkdir "%RUNNER_TEMP%\sherpa" 2>NUL
           tar -xf "%RUNNER_TEMP%\sherpa.tar.bz2" -C "%RUNNER_TEMP%\sherpa"
+          echo Copying DLLs...
           for %%f in (sherpa-onnx-c-api.dll onnxruntime.dll onnxruntime_providers_shared.dll) do (
-            for /R "%RUNNER_TEMP%\sherpa" %%g in (%%f) do copy "%%g" "libs\runtimes\win-x64\%%f"
+            for /R "%RUNNER_TEMP%\sherpa" %%g in (%%f) do copy /Y "%%g" "libs\runtimes\win-x64\%%f"
           )
           dir libs\runtimes\win-x64\*.dll
 

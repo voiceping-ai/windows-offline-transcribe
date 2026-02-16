@@ -175,6 +175,18 @@ public class ModelInfoTests
     }
 
     [Fact]
+    public void Qwen3AsrOnnx_HasExpectedFiles()
+    {
+        var model = ModelInfo.AvailableModels.First(m => m.Id == "qwen3-asr-0.6b-onnx");
+        Assert.Equal(5, model.Files.Count);
+        Assert.Equal(EngineType.QwenAsrOnnx, model.EngineType);
+        Assert.Null(model.SherpaModelType);
+        Assert.Contains(model.Files, f => f.LocalName == "encoder.onnx");
+        Assert.Contains(model.Files, f => f.LocalName == "decoder.onnx");
+        Assert.Contains(model.Files, f => f.LocalName == "embed_tokens.bin");
+    }
+
+    [Fact]
     public void WindowsSpeech_HasNoFiles()
     {
         var model = ModelInfo.AvailableModels.First(m => m.Id == "windows-speech");
@@ -197,6 +209,9 @@ public class ModelInfoTests
 
         var qwenAsr = ModelInfo.AvailableModels.First(m => m.EngineType == EngineType.QwenAsr);
         Assert.Contains("qwen-asr", qwenAsr.InferenceMethod);
+
+        var qwenAsrOnnx = ModelInfo.AvailableModels.First(m => m.EngineType == EngineType.QwenAsrOnnx);
+        Assert.Contains("ONNX Runtime/DirectML", qwenAsrOnnx.InferenceMethod);
 
         var windowsSpeech = ModelInfo.AvailableModels.First(m => m.EngineType == EngineType.WindowsSpeech);
         Assert.Contains("Windows Speech API", windowsSpeech.InferenceMethod);

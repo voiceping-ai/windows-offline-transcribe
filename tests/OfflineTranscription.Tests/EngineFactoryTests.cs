@@ -43,6 +43,19 @@ public class EngineFactoryTests
     }
 
     [Fact]
+    public void Create_QwenAsrOnnx_HasExpectedPlatformBehavior()
+    {
+        var model = ModelInfo.AvailableModels.First(m => m.EngineType == EngineType.QwenAsrOnnx);
+
+#if WINDOWS10_0_19041_0_OR_GREATER
+        using var engine = EngineFactory.Create(model);
+        Assert.NotNull(engine);
+#else
+        Assert.Throws<PlatformNotSupportedException>(() => EngineFactory.Create(model));
+#endif
+    }
+
+    [Fact]
     public void Create_AllModels_ReturnNonNull()
     {
         foreach (var model in ModelInfo.AvailableModels)

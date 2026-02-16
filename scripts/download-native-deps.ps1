@@ -36,7 +36,7 @@ Write-Host "Output directory: $OutputDir"
 # ── Download whisper.cpp ──
 Write-Host "`n=== Downloading whisper.cpp v${WhisperVersion} ==="
 $whisperZip = Join-Path $tempDir 'whisper-bin-x64.zip'
-Invoke-WebRequest -Uri $WhisperUrl -OutFile $whisperZip -UseBasicParsing
+curl.exe -fSL --retry 3 -o $whisperZip $WhisperUrl
 Write-Host "  Downloaded: $([math]::Round((Get-Item $whisperZip).Length / 1MB, 1)) MB"
 
 $whisperExtract = Join-Path $tempDir 'whisper'
@@ -57,15 +57,7 @@ foreach ($dll in $whisperDlls) {
 # ── Download sherpa-onnx ──
 Write-Host "`n=== Downloading sherpa-onnx v${SherpaVersion} ==="
 $sherpaTar = Join-Path $tempDir 'sherpa-onnx.tar.bz2'
-
-# Try the standard URL first, fall back to -MD-Release variant
-try {
-    Invoke-WebRequest -Uri $SherpaUrl -OutFile $sherpaTar -UseBasicParsing
-} catch {
-    Write-Host "  Standard URL failed, trying MD-Release variant..."
-    $SherpaUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SherpaVersion}/sherpa-onnx-v${SherpaVersion}-win-x64-shared-MD-Release.tar.bz2"
-    Invoke-WebRequest -Uri $SherpaUrl -OutFile $sherpaTar -UseBasicParsing
-}
+curl.exe -fSL --retry 3 -o $sherpaTar $SherpaUrl
 Write-Host "  Downloaded: $([math]::Round((Get-Item $sherpaTar).Length / 1MB, 1)) MB"
 
 # Extract tar.bz2 (use tar which is built into Windows 10+)

@@ -38,47 +38,31 @@ Models are downloaded from Hugging Face at runtime and stored under `%LOCALAPPDA
 
 Benchmark: JFK inauguration excerpt (11s, 22 words). Device: i5-1035G1 (4C/8T), 8 GB RAM, CPU-only.
 
-| Model ID | Engine | Params | Disk | Languages | Inference | RTF | Words/s |
+| Model ID | Engine | Params (weights) | Disk (download) | Languages | Inference | RTF | Words/s |
 |---|---|---:|---:|---|---:|---:|---:|
-| `moonshine-tiny` | sherpa-onnx offline | 27M | ~125 MB | English | 383 ms | 0.035x | 57.5 |
-| `sensevoice-small` | sherpa-onnx offline | 234M | ~240 MB | zh/en/ja/ko/yue | 443 ms | 0.040x | 49.6 |
-| `moonshine-base` | sherpa-onnx offline | 61M | ~290 MB | English | 653 ms | 0.059x | 33.7 |
-| **`parakeet-tdt-v2`** | **sherpa-onnx offline** | **600M** | **~660 MB** | **English** | **984 ms** | **0.089x** | **22.4** |
-| `zipformer-20m` | sherpa-onnx streaming | 20M | ~73 MB | English | 1,312 ms | 0.119x | 16.8 |
-| `whisper-tiny` | whisper.cpp | 39M | ~80 MB | 99 languages | 1,811 ms | 0.165x | 12.1 |
-| `whisper-base` | whisper.cpp | 74M | ~150 MB | 99 languages | 3,907 ms | 0.355x | 5.6 |
-| `omnilingual-300m` | sherpa-onnx offline | 300M | ~365 MB | 1,600+ languages | 2,059 ms | 0.187x | — |
-| **`qwen3-asr-0.6b`** | **qwen-asr (C)** | **600M** | **~1.9 GB** | **52 languages** | **13,632 ms** | **1.239x** | **1.6** |
-| `whisper-small` | whisper.cpp | 244M | ~500 MB | 99 languages | 18,942 ms | 1.722x | 1.2 |
-| `whisper-large-v3-turbo` | whisper.cpp | 809M | ~834 MB | 99 languages | — | — | — |
+| `moonshine-tiny` | sherpa-onnx offline | 27 M | ~125 MB | English | 383 ms | 0.035x | 57.5 |
+| `sensevoice-small` | sherpa-onnx offline | 234 M | ~240 MB | zh/en/ja/ko/yue | 443 ms | 0.040x | 49.6 |
+| `moonshine-base` | sherpa-onnx offline | 61 M | ~290 MB | English | 653 ms | 0.059x | 33.7 |
+| **`parakeet-tdt-v2`** | **sherpa-onnx offline** | **600 M** | **~660 MB** | **English** | **984 ms** | **0.089x** | **22.4** |
+| `zipformer-20m` | sherpa-onnx streaming | 20 M | ~73 MB | English | 1,312 ms | 0.119x | 16.8 |
+| `whisper-tiny` | whisper.cpp | 39 M | ~80 MB | 99 languages | 1,811 ms | 0.165x | 12.1 |
+| `whisper-base` | whisper.cpp | 74 M | ~150 MB | 99 languages | 3,907 ms | 0.355x | 5.6 |
+| `omnilingual-300m` | sherpa-onnx offline | 300 M | ~365 MB | 1,600+ languages | 2,059 ms | 0.187x | — |
+| **`qwen3-asr-0.6b`** | **qwen-asr (C)** | **600 M** | **~1.9 GB** | **52 languages** | **13,632 ms** | **1.239x** | **1.6** |
+| `whisper-small` | whisper.cpp | 244 M | ~500 MB | 99 languages | 18,942 ms | 1.722x | 1.2 |
+| `whisper-large-v3-turbo` | whisper.cpp | 809 M | ~834 MB | 99 languages | — | — | — |
 | `windows-speech` | Windows Speech API | N/A | 0 MB | Installed packs | — | — | — |
 
-RTF = Real-Time Factor (lower = faster). RTF < 1.0 means faster than real-time. **Bold** = recommended models.
+- **Params (weights)** = number of trainable model parameters (e.g. 600 M = 600 million parameters).
+- **Disk (download)** = approximate total download size for all model files (ONNX weights, tokenizer, config).
+- **RTF** = Real-Time Factor (lower = faster). RTF < 1.0 means faster than real-time.
+- **Bold** = recommended models.
 
 ![Inference Speed](docs/images/benchmark-inference.png)
 
 ![Throughput](docs/images/benchmark-throughput.png)
 
 Model weights are not distributed with this repo; model licensing varies. See `NOTICE`.
-
-### Benchmark Results
-
-All models tested on JFK inauguration excerpt (11s audio, 22 words).
-Device: Intel Core i5-1035G1 @ 1.00 GHz (4C/8T), 8 GB RAM, CPU-only (no GPU).
-
-| Model | Inference (ms) | RTF | Words/sec | Notes |
-|---|---:|---:|---:|---|
-| moonshine-tiny | 383 | 0.035x | 57.5 | Fastest. English only, no punctuation. |
-| sensevoice-small | 443 | 0.040x | 49.6 | 5 languages, no punctuation. |
-| moonshine-base | 653 | 0.059x | 33.7 | English only, no punctuation. |
-| **parakeet-tdt-v2** | **984** | **0.089x** | **22.4** | **Best quality/speed. Full punctuation.** |
-| zipformer-20m | 1,312 | 0.119x | 16.8 | Streaming model. ALL CAPS output. |
-| whisper-tiny | 1,811 | 0.165x | 12.1 | 99 languages, full punctuation. |
-| whisper-base | 3,907 | 0.355x | 5.6 | 99 languages, full punctuation. |
-| **qwen3-asr-0.6b** | **13,632** | **1.239x** | **1.6** | **Best quality. 52 languages. Slow on CPU.** |
-| whisper-small | 18,942 | 1.722x | 1.2 | 99 languages, full punctuation. |
-
-RTF = Real-Time Factor (lower = faster). RTF < 1.0 means faster than real-time.
 
 > **Want to see a new model or device benchmark?** If there is an offline ASR model you would like added, or you have benchmark results to share from your hardware, please [open an issue](https://github.com/voiceping-ai/windows-offline-transcribe/issues/new). Community contributions of inference benchmarks on different Windows devices are welcome.
 

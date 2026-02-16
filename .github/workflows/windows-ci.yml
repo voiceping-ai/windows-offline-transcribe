@@ -100,12 +100,27 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Download native dependencies
-        shell: pwsh
+      - name: Download whisper.cpp DLLs
+        shell: cmd
         run: |
-          $ProgressPreference = 'SilentlyContinue'
-          $ErrorActionPreference = 'Stop'
-          & "$PWD\scripts\download-native-deps.ps1" -OutputDir (Join-Path $PWD 'libs\runtimes\win-x64')
+          mkdir libs\runtimes\win-x64
+          curl.exe -fsSL --retry 3 -o "%RUNNER_TEMP%\whisper.zip" "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.3/whisper-bin-x64.zip"
+          powershell -NoProfile -Command "Expand-Archive -Path '$env:RUNNER_TEMP\whisper.zip' -DestinationPath '$env:RUNNER_TEMP\whisper' -Force"
+          for %%f in (whisper.dll ggml.dll ggml-base.dll ggml-cpu.dll) do (
+            for /R "%RUNNER_TEMP%\whisper" %%g in (%%f) do copy "%%g" "libs\runtimes\win-x64\%%f"
+          )
+          dir libs\runtimes\win-x64\*.dll
+
+      - name: Download sherpa-onnx DLLs
+        shell: cmd
+        run: |
+          curl.exe -fsSL --retry 3 -o "%RUNNER_TEMP%\sherpa.tar.bz2" "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.25/sherpa-onnx-v1.12.25-win-x64-shared-MD-Release.tar.bz2"
+          mkdir "%RUNNER_TEMP%\sherpa"
+          tar -xf "%RUNNER_TEMP%\sherpa.tar.bz2" -C "%RUNNER_TEMP%\sherpa"
+          for %%f in (sherpa-onnx-c-api.dll onnxruntime.dll onnxruntime_providers_shared.dll) do (
+            for /R "%RUNNER_TEMP%\sherpa" %%g in (%%f) do copy "%%g" "libs\runtimes\win-x64\%%f"
+          )
+          dir libs\runtimes\win-x64\*.dll
 
       - name: Publish WinUI app
         shell: pwsh

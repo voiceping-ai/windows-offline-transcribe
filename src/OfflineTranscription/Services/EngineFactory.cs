@@ -17,7 +17,7 @@ public static class EngineFactory
         EngineType.SherpaOnnxStreaming => new SherpaOnnxStreamingEngine(),
         EngineType.WindowsSpeech => CreateWindowsSpeechEngine(),
         EngineType.QwenAsr => new QwenAsrEngine(),
-        EngineType.QwenAsrOnnx => new QwenAsrOnnxEngine(),
+        EngineType.QwenAsrOnnx => CreateQwenAsrOnnxEngine(),
         _ => throw new NotSupportedException($"Unsupported engine type: {model.EngineType}")
     };
 
@@ -28,6 +28,16 @@ public static class EngineFactory
 #else
         throw new PlatformNotSupportedException(
             "WindowsSpeech engine requires Windows 10 19041+ with WinRT APIs.");
+#endif
+    }
+
+    private static IASREngine CreateQwenAsrOnnxEngine()
+    {
+#if WINDOWS10_0_19041_0_OR_GREATER
+        return new QwenAsrOnnxEngine();
+#else
+        throw new PlatformNotSupportedException(
+            "QwenAsrOnnx engine requires Microsoft.ML.OnnxRuntime.DirectML.");
 #endif
     }
 }

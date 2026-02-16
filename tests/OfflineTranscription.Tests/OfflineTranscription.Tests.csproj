@@ -33,6 +33,8 @@
     <Compile Include="..\..\src\OfflineTranscription\Engines\*.cs" LinkBase="Engines" />
     <!-- WindowsSpeechEngine uses WinRT APIs not available in plain net8.0 test TFM -->
     <Compile Remove="..\..\src\OfflineTranscription\Engines\WindowsSpeechEngine.cs" />
+    <!-- QwenAsrOnnxEngine depends on Microsoft.ML.OnnxRuntime + Audio/Tokenizers not in test project -->
+    <Compile Remove="..\..\src\OfflineTranscription\Engines\QwenAsrOnnxEngine.cs" />
     <Compile Include="..\..\src\OfflineTranscription\Interop\*.cs" LinkBase="Interop" />
     <Compile Include="..\..\src\OfflineTranscription\Utilities\WavWriter.cs" Link="Utilities\WavWriter.cs" />
     <Compile Include="..\..\src\OfflineTranscription\Utilities\SessionFileManager.cs" Link="Utilities\SessionFileManager.cs" />

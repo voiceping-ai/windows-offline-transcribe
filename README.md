@@ -40,17 +40,17 @@ Benchmark: JFK inauguration excerpt (11s, 22 words). Device: i5-1035G1 (4C/8T), 
 
 | Model ID | Engine | Params (weights) | Disk (download) | Languages | Inference | RTF | Words/s |
 |---|---|---:|---:|---|---:|---:|---:|
-| `moonshine-tiny` | sherpa-onnx offline | 27 M | ~125 MB | English | 383 ms | 0.035x | 57.5 |
-| `sensevoice-small` | sherpa-onnx offline | 234 M | ~240 MB | zh/en/ja/ko/yue | 443 ms | 0.040x | 49.6 |
-| `moonshine-base` | sherpa-onnx offline | 61 M | ~290 MB | English | 653 ms | 0.059x | 33.7 |
-| **`parakeet-tdt-v2`** | **sherpa-onnx offline** | **600 M** | **~660 MB** | **English** | **984 ms** | **0.089x** | **22.4** |
-| `zipformer-20m` | sherpa-onnx streaming | 20 M | ~73 MB | English | 1,312 ms | 0.119x | 16.8 |
-| `whisper-tiny` | whisper.cpp | 39 M | ~80 MB | 99 languages | 1,811 ms | 0.165x | 12.1 |
-| `whisper-base` | whisper.cpp | 74 M | ~150 MB | 99 languages | 3,907 ms | 0.355x | 5.6 |
-| `omnilingual-300m` | sherpa-onnx offline | 300 M | ~365 MB | 1,600+ languages | 2,059 ms | 0.187x | — |
-| **`qwen3-asr-0.6b`** | **qwen-asr (C)** | **600 M** | **~1.9 GB** | **52 languages** | **13,632 ms** | **1.239x** | **1.6** |
-| `whisper-small` | whisper.cpp | 244 M | ~500 MB | 99 languages | 18,942 ms | 1.722x | 1.2 |
-| `whisper-large-v3-turbo` | whisper.cpp | 809 M | ~834 MB | 99 languages | — | — | — |
+| `moonshine-tiny` | sherpa-onnx offline | 27 M | ~125 MB | English | 435 ms | 0.040x | 50.6 |
+| `sensevoice-small` | sherpa-onnx offline | 234 M | ~240 MB | zh/en/ja/ko/yue | 462 ms | 0.042x | 47.6 |
+| `moonshine-base` | sherpa-onnx offline | 61 M | ~290 MB | English | 534 ms | 0.049x | 41.2 |
+| **`parakeet-tdt-v2`** | **sherpa-onnx offline** | **600 M** | **~660 MB** | **English** | **1,239 ms** | **0.113x** | **17.8** |
+| `zipformer-20m` | sherpa-onnx streaming | 20 M | ~73 MB | English | 1,775 ms | 0.161x | 12.4 |
+| `whisper-tiny` | whisper.cpp | 39 M | ~80 MB | 99 languages | 2,325 ms | 0.211x | 9.5 |
+| `omnilingual-300m` | sherpa-onnx offline | 300 M | ~365 MB | 1,600+ languages | 2,360 ms | 0.215x | — |
+| `whisper-base` | whisper.cpp | 74 M | ~150 MB | 99 languages | 6,501 ms | 0.591x | 3.4 |
+| **`qwen3-asr-0.6b`** | **qwen-asr (C)** | **600 M** | **~1.9 GB** | **52 languages** | **13,359 ms** | **1.214x** | **1.6** |
+| `whisper-small` | whisper.cpp | 244 M | ~500 MB | 99 languages | 21,260 ms | 1.933x | 1.0 |
+| `whisper-large-v3-turbo` | whisper.cpp | 809 M | ~834 MB | 99 languages | 92,845 ms | 8.440x | 0.2 |
 | `windows-speech` | Windows Speech API | N/A | 0 MB | Installed packs | — | — | — |
 
 - **Params (weights)** = number of trainable model parameters (e.g. 600 M = 600 million parameters).

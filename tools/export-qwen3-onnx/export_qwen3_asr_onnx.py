@@ -246,9 +246,11 @@ class RMSNorm(nn.Module):
         self.eps = eps
 
     def forward(self, x):
-        variance = x.float().pow(2).mean(-1, keepdim=True)
-        x = x.float() * torch.rsqrt(variance + self.eps)
-        return (self.weight * x).to(x.dtype)
+        # All weights are float32 (converted from bf16 during loading),
+        # so we avoid .to(x.dtype) which produces problematic Cast nodes in ONNX.
+        variance = x.pow(2).mean(-1, keepdim=True)
+        x = x * torch.rsqrt(variance + self.eps)
+        return self.weight * x
 
 
 class RotaryEmbedding(nn.Module):
@@ -519,6 +521,7 @@ def export_encoder(encoder, cfg, output_dir):
             "audio_features": {1: "num_tokens"},
         },
         do_constant_folding=True,
+        dynamo=False,
     )
     print(f"Encoder exported to {output_path}", file=sys.stderr)
 
@@ -587,6 +590,7 @@ def export_decoder(decoder, cfg, output_dir):
         output_names=output_names,
         dynamic_axes=dynamic_axes,
         do_constant_folding=True,
+        dynamo=False,
     )
     print(f"Decoder exported to {output_path}", file=sys.stderr)
 

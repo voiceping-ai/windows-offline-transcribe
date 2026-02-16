@@ -16,6 +16,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Disable progress bars — they cause Invoke-WebRequest to hang on CI
+$ProgressPreference = 'SilentlyContinue'
 
 # ── Versions ──
 $WhisperVersion  = '1.8.3'
@@ -36,7 +38,7 @@ Write-Host "Output directory: $OutputDir"
 # ── Download whisper.cpp ──
 Write-Host "`n=== Downloading whisper.cpp v${WhisperVersion} ==="
 $whisperZip = Join-Path $tempDir 'whisper-bin-x64.zip'
-curl.exe -fSL --retry 3 -o $whisperZip $WhisperUrl
+Invoke-WebRequest -Uri $WhisperUrl -OutFile $whisperZip -UseBasicParsing
 Write-Host "  Downloaded: $([math]::Round((Get-Item $whisperZip).Length / 1MB, 1)) MB"
 
 $whisperExtract = Join-Path $tempDir 'whisper'
@@ -57,7 +59,7 @@ foreach ($dll in $whisperDlls) {
 # ── Download sherpa-onnx ──
 Write-Host "`n=== Downloading sherpa-onnx v${SherpaVersion} ==="
 $sherpaTar = Join-Path $tempDir 'sherpa-onnx.tar.bz2'
-curl.exe -fSL --retry 3 -o $sherpaTar $SherpaUrl
+Invoke-WebRequest -Uri $SherpaUrl -OutFile $sherpaTar -UseBasicParsing
 Write-Host "  Downloaded: $([math]::Round((Get-Item $sherpaTar).Length / 1MB, 1)) MB"
 
 # Extract tar.bz2 (use tar which is built into Windows 10+)

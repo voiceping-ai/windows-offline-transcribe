@@ -130,13 +130,20 @@ jobs:
           dir libs\runtimes\win-x64\*.dll
 
       - name: Download translation DLLs
-        shell: cmd
+        shell: pwsh
         run: |
-          echo Downloading translation native DLLs...
-          curl.exe -fsSL --retry 3 -o "%RUNNER_TEMP%\translation.zip" "https://github.com/voiceping-ai/windows-offline-transcribe/releases/download/translation-native-v1/translation-native-win-x64.zip"
-          echo Extracting...
-          tar -xf "%RUNNER_TEMP%\translation.zip" -C "libs\runtimes\win-x64"
-          dir libs\runtimes\win-x64\*.dll
+          Write-Host "Downloading translation native DLLs..."
+          $zipPath = Join-Path $env:RUNNER_TEMP 'translation.zip'
+          $url = "https://github.com/voiceping-ai/windows-offline-transcribe/releases/download/translation-native-v1/translation-native-win-x64.zip"
+          try {
+            Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
+            Write-Host "Extracting..."
+            tar -xf $zipPath -C "libs\runtimes\win-x64"
+            Write-Host "Translation DLLs extracted."
+          } catch {
+            Write-Host "::warning::Translation DLLs not available yet (release translation-native-v1 not found). Skipping."
+          }
+          Get-ChildItem libs\runtimes\win-x64\*.dll | Format-Table Name, Length
 
       - name: Publish WinUI app
         shell: pwsh
@@ -246,23 +253,39 @@ jobs:
           }
 
           # Verify native inference DLLs are present
-          $nativeDlls = @(
+          $requiredDlls = @(
             'whisper.dll',
             'ggml.dll',
             'ggml-base.dll',
             'ggml-cpu.dll',
             'sherpa-onnx-c-api.dll',
             'onnxruntime.dll',
-            'onnxruntime_providers_shared.dll',
+            'onnxruntime_providers_shared.dll'
+          )
+          foreach ($dll in $requiredDlls) {
+            if (-not (Test-Path (Join-Path $verifyDir $dll))) {
+              throw "Portable zip missing native DLL: $dll"
+            }
+          }
+
+          # Translation DLLs are optional until the release is published
+          $translationDlls = @(
             'OfflineTranscription.NativeTranslation.dll',
             'libctranslate2.dll',
             'libstdc++-6.dll',
             'libgomp-1.dll'
           )
-          foreach ($dll in $nativeDlls) {
+          $translationPresent = $true
+          foreach ($dll in $translationDlls) {
             if (-not (Test-Path (Join-Path $verifyDir $dll))) {
-              throw "Portable zip missing native DLL: $dll"
+              Write-Host "::warning::Translation DLL not packaged: $dll"
+              $translationPresent = $false
             }
+          }
+          if ($translationPresent) {
+            Write-Host "All translation DLLs present."
+          } else {
+            Write-Host "::warning::Translation DLLs missing - translation feature will not be available in this build."
           }
 
           $checksumFile = Join-Path $PWD 'artifacts\checksums\windows-binaries.sha256'

@@ -9,7 +9,8 @@ public enum EngineType
     SherpaOnnxOffline,
     SherpaOnnxStreaming,
     WindowsSpeech,
-    QwenAsr
+    QwenAsr,
+    QwenAsrOnnx
 }
 
 /// <summary>

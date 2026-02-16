@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.2.*" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.21.*" />
   </ItemGroup>
 
   <!-- Include engine + interop source files directly -->
@@ -21,6 +22,8 @@
     <!-- Exclude WindowsSpeechEngine (WinRT) -->
     <Compile Remove="..\..\src\OfflineTranscription\Engines\WindowsSpeechEngine.cs" />
     <Compile Include="..\..\src\OfflineTranscription\Interop\*.cs" LinkBase="Interop" />
+    <Compile Include="..\..\src\OfflineTranscription\Audio\*.cs" LinkBase="Audio" />
+    <Compile Include="..\..\src\OfflineTranscription\Tokenizers\*.cs" LinkBase="Tokenizers" />
     <Compile Include="..\..\src\OfflineTranscription\Services\ModelDownloader.cs" Link="Services\ModelDownloader.cs" />
     <Compile Include="..\..\src\OfflineTranscription\Services\EngineFactory.cs" Link="Services\EngineFactory.cs" />
   </ItemGroup>

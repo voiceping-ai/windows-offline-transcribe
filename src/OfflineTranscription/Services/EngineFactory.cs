@@ -17,6 +17,7 @@ public static class EngineFactory
         EngineType.SherpaOnnxStreaming => new SherpaOnnxStreamingEngine(),
         EngineType.WindowsSpeech => CreateWindowsSpeechEngine(),
         EngineType.QwenAsr => new QwenAsrEngine(),
+        EngineType.QwenAsrOnnx => new QwenAsrOnnxEngine(),
         _ => throw new NotSupportedException($"Unsupported engine type: {model.EngineType}")
     };
 

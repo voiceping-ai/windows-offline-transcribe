@@ -2,7 +2,7 @@ namespace OfflineTranscription.Models;
 
 /// <summary>
 /// Metadata for an available ASR model. Port of Android ModelInfo.kt.
-/// 12 models across 5 engine types.
+/// 13 models across 6 engine types.
 /// </summary>
 public record ModelInfo(
     string Id,
@@ -23,6 +23,7 @@ public record ModelInfo(
         EngineType.SherpaOnnxStreaming => "sherpa-onnx streaming (ONNX Runtime)",
         EngineType.WindowsSpeech => "Windows Speech API (WinRT)",
         EngineType.QwenAsr => "qwen-asr (C/P-Invoke)",
+        EngineType.QwenAsrOnnx => "qwen-asr (ONNX Runtime/DirectML)",
         _ => "Unknown"
     };
 
@@ -52,6 +53,9 @@ public record ModelInfo(
     private const string Qwen3Asr06BBaseUrl =
         "https://huggingface.co/Qwen/Qwen3-ASR-0.6B/resolve/main/";
 
+    private const string Qwen3Asr06BOnnxBaseUrl =
+        "https://huggingface.co/voiceping-ai/qwen3-asr-0.6b-onnx/resolve/main/";
+
     private static IReadOnlyList<ModelFile> MoonshineFiles(string baseUrl) =>
     [
         new($"{baseUrl}preprocess.onnx", "preprocess.onnx"),
@@ -62,7 +66,7 @@ public record ModelInfo(
     ];
 
     /// <summary>
-    /// All available models (12 models across 5 engine types).
+    /// All available models (13 models across 6 engine types).
     /// </summary>
     public static IReadOnlyList<ModelInfo> AvailableModels { get; } =
     [
@@ -222,6 +226,25 @@ public record ModelInfo(
                 new($"{Qwen3Asr06BBaseUrl}merges.txt", "merges.txt"),
                 new($"{Qwen3Asr06BBaseUrl}config.json", "config.json"),
                 new($"{Qwen3Asr06BBaseUrl}generation_config.json", "generation_config.json"),
+            ]
+        ),
+
+        // ── Qwen3-ASR ONNX (ONNX Runtime / DirectML) ──
+        new(
+            Id: "qwen3-asr-0.6b-onnx",
+            DisplayName: "Qwen3 ASR 0.6B (ONNX)",
+            EngineType: EngineType.QwenAsrOnnx,
+            ParameterCount: "600M",
+            SizeOnDisk: "~1.2 GB",
+            Description: "Qwen3 ASR 0.6B via ONNX Runtime. DirectML GPU acceleration with CPU fallback.",
+            Languages: "52 languages",
+            Files:
+            [
+                new($"{Qwen3Asr06BOnnxBaseUrl}encoder.onnx", "encoder.onnx"),
+                new($"{Qwen3Asr06BOnnxBaseUrl}decoder.onnx", "decoder.onnx"),
+                new($"{Qwen3Asr06BOnnxBaseUrl}embed_tokens.bin", "embed_tokens.bin"),
+                new($"{Qwen3Asr06BOnnxBaseUrl}vocab.json", "vocab.json"),
+                new($"{Qwen3Asr06BOnnxBaseUrl}merges.txt", "merges.txt"),
             ]
         ),
 

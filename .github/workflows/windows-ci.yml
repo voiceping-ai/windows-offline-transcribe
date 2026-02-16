@@ -237,7 +237,15 @@ jobs:
           }
 
           # Verify native inference DLLs are present
-          $nativeDlls = @('whisper.dll', 'sherpa-onnx-c-api.dll', 'onnxruntime.dll')
+          $nativeDlls = @(
+            'whisper.dll',
+            'ggml.dll',
+            'ggml-base.dll',
+            'ggml-cpu.dll',
+            'sherpa-onnx-c-api.dll',
+            'onnxruntime.dll',
+            'onnxruntime_providers_shared.dll'
+          )
           foreach ($dll in $nativeDlls) {
             if (-not (Test-Path (Join-Path $verifyDir $dll))) {
               throw "Portable zip missing native DLL: $dll"

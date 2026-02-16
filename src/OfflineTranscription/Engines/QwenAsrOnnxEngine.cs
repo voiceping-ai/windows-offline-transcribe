@@ -65,79 +65,116 @@ public sealed class QwenAsrOnnxEngine : IASREngine
                 SessionOptions? sessionOpts = null;
                 try
                 {
-                    sessionOpts = CreateSessionOptions("directml");
-                    // Probe with encoder (smaller model)
-                    using var probe = new InferenceSession(encoderPath, sessionOpts);
-                    _provider = "directml";
-                    Debug.WriteLine("[QwenAsrOnnx] DirectML provider available");
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[QwenAsrOnnx] DirectML probe failed: {ex.Message}");
-                    sessionOpts?.Dispose();
-                    sessionOpts = null;
-                }
+                    try
+                    {
+                        sessionOpts = CreateSessionOptions("directml");
+                        // Probe with encoder (smaller model)
+                        using var probe = new InferenceSession(encoderPath, sessionOpts);
+                        _provider = "directml";
+                        Debug.WriteLine("[QwenAsrOnnx] DirectML provider available");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[QwenAsrOnnx] DirectML probe failed: {ex.Message}");
+                        sessionOpts?.Dispose();
+                        sessionOpts = null;
+                    }
 
-                if (sessionOpts == null)
-                {
-                    sessionOpts = CreateSessionOptions("cpu");
-                    Debug.WriteLine("[QwenAsrOnnx] Using CPU provider");
-                }
+                    if (sessionOpts == null)
+                    {
+                        sessionOpts = CreateSessionOptions("cpu");
+                        Debug.WriteLine("[QwenAsrOnnx] Using CPU provider");
+                    }
 
-                try
-                {
                     _encoderSession = new InferenceSession(encoderPath, sessionOpts);
                     _decoderSession = new InferenceSession(decoderPath, sessionOpts);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[QwenAsrOnnx] Failed to load sessions: {ex.Message}");
-                    _encoderSession?.Dispose();
-                    _decoderSession?.Dispose();
-                    _encoderSession = null;
-                    _decoderSession = null;
-                    sessionOpts.Dispose();
-                    return false;
-                }
 
-                // Load tokenizer
-                if (File.Exists(vocabPath))
-                {
+                    if (!File.Exists(vocabPath))
+                    {
+                        Debug.WriteLine("[QwenAsrOnnx] WARNING: vocab.json not found");
+                        Release_Internal();
+                        return false;
+                    }
+
                     _tokenizer = new QwenTokenizer(vocabPath);
                     Debug.WriteLine("[QwenAsrOnnx] Tokenizer loaded");
-                }
-                else
-                {
-                    Debug.WriteLine("[QwenAsrOnnx] WARNING: vocab.json not found");
-                    return false;
-                }
 
-                // Load embedding matrix
-                if (File.Exists(embedPath))
-                {
+                    if (!File.Exists(embedPath))
+                    {
+                        Debug.WriteLine("[QwenAsrOnnx] WARNING: embed_tokens.bin not found");
+                        Release_Internal();
+                        return false;
+                    }
+
                     var bytes = File.ReadAllBytes(embedPath);
+                    if (bytes.Length == 0 || bytes.Length % sizeof(float) != 0)
+                    {
+                        Debug.WriteLine("[QwenAsrOnnx] Invalid embed_tokens.bin size");
+                        Release_Internal();
+                        return false;
+                    }
+
                     _embedTokensMatrix = new float[bytes.Length / sizeof(float)];
                     Buffer.BlockCopy(bytes, 0, _embedTokensMatrix, 0, bytes.Length);
 
                     // Infer dimensions: vocab_size * hidden_size = total floats
                     _vocabSize = DefaultVocabSize;
+                    if (_embedTokensMatrix.Length % _vocabSize != 0)
+                    {
+                        Debug.WriteLine(
+                            $"[QwenAsrOnnx] Invalid embedding dimensions: total={_embedTokensMatrix.Length}, vocab={_vocabSize}");
+                        Release_Internal();
+                        return false;
+                    }
+
                     _hiddenSize = _embedTokensMatrix.Length / _vocabSize;
+                    if (_hiddenSize != DefaultHiddenSize)
+                    {
+                        Debug.WriteLine(
+                            $"[QwenAsrOnnx] Unexpected hidden size: {_hiddenSize}, expected {DefaultHiddenSize}");
+                        Release_Internal();
+                        return false;
+                    }
+
                     Debug.WriteLine($"[QwenAsrOnnx] Embeddings loaded: [{_vocabSize}, {_hiddenSize}]");
+
+                    // Set decoder dimensions
+                    _numLayers = DefaultNumLayers;
+                    _numKvHeads = DefaultNumKvHeads;
+                    _headDim = DefaultHeadDim;
+
+                    Debug.WriteLine($"[QwenAsrOnnx] Model loaded (provider={_provider})");
+                    return true;
                 }
-                else
+                catch (OperationCanceledException)
                 {
-                    Debug.WriteLine("[QwenAsrOnnx] WARNING: embed_tokens.bin not found");
+                    Release_Internal();
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[QwenAsrOnnx] Model load failed: {ex.Message}");
+                    Release_Internal();
                     return false;
                 }
-
-                // Set decoder dimensions
-                _numLayers = DefaultNumLayers;
-                _numKvHeads = DefaultNumKvHeads;
-                _headDim = DefaultHeadDim;
-
-                Debug.WriteLine($"[QwenAsrOnnx] Model loaded (provider={_provider})");
-                return true;
+                finally
+                {
+                    try
+                    {
+                        sessionOpts?.Dispose();
+                    }
+                    catch
+                    {
+                        // SessionOptions.Dispose should not fail in practice; ignore if it does.
+                    }
+                }
             }, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Debug.WriteLine($"[QwenAsrOnnx] Model load failed: {ex.Message}");
+            Release_Internal();
+            return false;
         }
         finally
         {

@@ -70,7 +70,8 @@ public partial class App : Application
         // Pre-load dependency DLLs so the Windows loader can find them.
         // ggml: whisper.dll imports ggml.dll and ggml-base.dll.
         // libopenblas: qwen_asr.dll links against OpenBLAS.
-        foreach (var dep in new[] { "ggml-base", "ggml-cpu", "ggml", "libopenblas" })
+        // libstdc++/libgomp/libctranslate2: translation engine dependencies.
+        foreach (var dep in new[] { "ggml-base", "ggml-cpu", "ggml", "libopenblas", "libstdc++-6", "libgomp-1", "libctranslate2" })
         {
             var depPath = Path.Combine(basePath, $"{dep}.dll");
             if (File.Exists(depPath))

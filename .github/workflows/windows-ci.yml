@@ -101,9 +101,54 @@ jobs:
         uses: microsoft/setup-msbuild@v2
 
       - name: Download native dependencies
-        shell: pwsh
+        shell: bash
         run: |
-          & "$PWD\scripts\download-native-deps.ps1" -OutputDir (Join-Path $PWD 'libs\runtimes\win-x64')
+          set -e
+          WHISPER_VER=1.8.3
+          SHERPA_VER=1.12.25
+          OUT_DIR="libs/runtimes/win-x64"
+          TEMP_DIR="${RUNNER_TEMP}/native-deps"
+
+          mkdir -p "$OUT_DIR" "$TEMP_DIR"
+
+          echo "=== Downloading whisper.cpp v${WHISPER_VER} ==="
+          curl -fsSL --retry 3 -o "$TEMP_DIR/whisper.zip" \
+            "https://github.com/ggml-org/whisper.cpp/releases/download/v${WHISPER_VER}/whisper-bin-x64.zip"
+          unzip -o "$TEMP_DIR/whisper.zip" -d "$TEMP_DIR/whisper"
+          for dll in whisper.dll ggml.dll ggml-base.dll ggml-cpu.dll; do
+            found=$(find "$TEMP_DIR/whisper" -name "$dll" | head -1)
+            if [ -n "$found" ]; then
+              cp "$found" "$OUT_DIR/$dll"
+              echo "  Copied: $dll"
+            else
+              echo "  WARNING: $dll not found"
+            fi
+          done
+
+          echo "=== Downloading sherpa-onnx v${SHERPA_VER} ==="
+          curl -fsSL --retry 3 -o "$TEMP_DIR/sherpa.tar.bz2" \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SHERPA_VER}/sherpa-onnx-v${SHERPA_VER}-win-x64-shared-MD-Release.tar.bz2"
+          mkdir -p "$TEMP_DIR/sherpa"
+          tar -xf "$TEMP_DIR/sherpa.tar.bz2" -C "$TEMP_DIR/sherpa"
+          for dll in sherpa-onnx-c-api.dll onnxruntime.dll onnxruntime_providers_shared.dll; do
+            found=$(find "$TEMP_DIR/sherpa" -name "$dll" | head -1)
+            if [ -n "$found" ]; then
+              cp "$found" "$OUT_DIR/$dll"
+              echo "  Copied: $dll"
+            else
+              echo "  WARNING: $dll not found"
+            fi
+          done
+
+          echo "=== Verification ==="
+          for dll in whisper.dll ggml.dll ggml-base.dll ggml-cpu.dll sherpa-onnx-c-api.dll onnxruntime.dll; do
+            if [ -f "$OUT_DIR/$dll" ]; then
+              echo "  OK: $dll ($(wc -c < "$OUT_DIR/$dll") bytes)"
+            else
+              echo "  MISSING: $dll" && exit 1
+            fi
+          done
+          echo "All native dependencies downloaded successfully."
 
       - name: Publish WinUI app
         shell: pwsh
